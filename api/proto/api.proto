@@ -1,0 +1,675 @@
+syntax = "proto3";
+package rpcprotobuf;
+
+import "google/api/annotations.proto";
+import "protoc-gen-swagger/options/annotations.proto";
+
+import "google/protobuf/empty.proto";
+
+
+// API Framework general options
+
+option (grpc.gateway.protoc_gen_swagger.options.openapiv2_swagger) = {
+	info: {
+		title: "MASS-Miner API";
+		version: "1.0";
+		contact: {
+			name: "MASS project";
+			url: "https://massnet.org/";
+			email: "contact@massnet.org";
+        };
+        license: {
+            name: "";
+            url: "";
+        };
+	};
+	// Overwriting host entry breaks tests, so this is not done here.
+	external_docs: {
+		url: "https://massnet.org/";
+		description: "MASS-Miner API Documentation";
+	}
+	schemes: [HTTP];
+	consumes: ["application/json", "application/x-foo-mime"];
+	produces: ["application/json", "application/x-foo-mime"];
+	responses: [{
+		key: "404";
+		value: {
+			description: "Not found.";
+			schema: {
+				json_schema: {
+					type: STRING;
+				}
+			}
+		}
+	}];
+};
+
+
+// API Endpoints
+service ApiService {
+    rpc GetBestBlock (google.protobuf.Empty) returns (GetBestBlockResponse) {
+        option (google.api.http) = {
+            get: "/v1/blocks/best"
+        };
+    }
+    rpc GetBlock (GetBlockRequest) returns (GetBlockResponse) {
+        option (google.api.http) = {
+            get: "/v1/blocks/{hash}"
+        };
+    }
+    rpc GetBlockHashByHeight (GetBlockHashByHeightRequest) returns (GetBlockHashByHeightResponse) {
+        option (google.api.http) = {
+            get: "/v1/blocks/hash/{height}"
+        };
+    }
+    rpc GetBlockByHeight (GetBlockByHeightRequest) returns (GetBlockResponse) {
+        option (google.api.http) = {
+            get: "/v1/blocks/height/{height}"
+        };
+    }
+    rpc GetBlockHeader (GetBlockHeaderRequest) returns (GetBlockHeaderResponse) {
+        option (google.api.http) = {
+             get: "/v1/blocks/{hash}/header"
+        };
+    }
+    rpc GetBlockHeightByPubKey (GetBlockHeightByPubKeyRequest) returns (GetBlockHeightByPubKeyResponse) {
+        option (google.api.http) = {
+            get:"/v1/blocks/pubkey/{public_key}"
+        };
+    }
+    rpc GetBlockV2 (GetBlockRequestV2) returns (GetBlockResponseV2) {
+        option (google.api.http) = {
+            get: "/v2/blocks/{id}"
+        };
+    }
+    rpc GetBlockHeaderV2 (GetBlockRequestV2) returns (GetBlockHeaderResponse) {
+        option (google.api.http) = {
+             get: "/v2/blocks/{id}/header"
+        };
+    }
+    rpc GetBlockVerbose1V2 (GetBlockRequestV2) returns (GetBlockResponse) {
+        option (google.api.http) = {
+            get: "/v2/blocks/{id}/verbose/1"
+        };
+    }
+    rpc GetCoinbase (GetCoinbaseRequest) returns (GetCoinbaseResponse) {
+        option (google.api.http) = {
+            get:"/v1/transactions/coinbase/{height}"
+        };
+    }
+    rpc GetTxPool (google.protobuf.Empty) returns (GetTxPoolResponse) {
+        option (google.api.http) = {
+            get: "/v1/transactions/pool"
+        };
+    }
+    rpc GetTxPoolVerbose0 (google.protobuf.Empty) returns (GetTxPoolVerbose0Response) {
+        option (google.api.http) = {
+            get: "/v1/transactions/pool/verbose/0"
+        };
+    }
+    rpc GetTxPoolVerbose1 (google.protobuf.Empty) returns (GetTxPoolVerbose1Response) {
+        option (google.api.http) = {
+            get: "/v1/transactions/pool/verbose/1"
+        };
+    }
+    rpc GetCapacitySpaces (google.protobuf.Empty) returns (WorkSpacesResponse) {
+        option (google.api.http) = {
+            get: "/v1/spaces"
+        };
+    }
+    rpc ConfigureCapacity (ConfigureSpaceKeeperRequest) returns (WorkSpacesResponse) {
+        option (google.api.http) = {
+              post: "/v1/spaces"
+              body: "*"
+        };
+    }
+    rpc GetCapacitySpace (WorkSpaceRequest) returns (WorkSpaceResponse) {
+        option (google.api.http) = {
+            get: "/v1/spaces/{space_id}"
+        };
+    }
+    rpc PlotCapacitySpaces (google.protobuf.Empty) returns (ActOnSpaceKeeperResponse) {
+        option (google.api.http) = {
+              post: "/v1/spaces/plot"
+              body: "*"
+        };
+    }
+    rpc PlotCapacitySpace (WorkSpaceRequest) returns (ActOnSpaceKeeperResponse) {
+        option (google.api.http) = {
+              post: "/v1/spaces/{space_id}/plot"
+              body: "*"
+        };
+    }
+    rpc MineCapacitySpaces (google.protobuf.Empty) returns (ActOnSpaceKeeperResponse) {
+        option (google.api.http) = {
+              post: "/v1/spaces/mine"
+              body: "*"
+        };
+    }
+    rpc MineCapacitySpace (WorkSpaceRequest) returns (ActOnSpaceKeeperResponse) {
+        option (google.api.http) = {
+              post: "/v1/spaces/{space_id}/mine"
+              body: "*"
+        };
+    }
+    rpc StopCapacitySpaces (google.protobuf.Empty) returns (ActOnSpaceKeeperResponse) {
+        option (google.api.http) = {
+              post: "/v1/spaces/stop"
+              body: "*"
+        };
+    }
+    rpc StopCapacitySpace (WorkSpaceRequest) returns (ActOnSpaceKeeperResponse) {
+        option (google.api.http) = {
+              post: "/v1/spaces/{space_id}/stop"
+              body: "*"
+        };
+    }
+    rpc GetClientStatus (google.protobuf.Empty) returns (GetClientStatusResponse) {
+        option (google.api.http) = {
+              get: "/v1/client/status"
+        };
+    }
+    rpc QuitClient (google.protobuf.Empty) returns (QuitClientResponse) {
+        option (google.api.http) = {
+              post: "/v1/client/quit"
+              body: "*"
+        };
+    }
+    rpc ExportKeystore (ExportKeystoreRequest) returns (ExportKeystoreResponse) {
+        option (google.api.http) = {
+            post:"/v1/wallets/export"
+            body:"*"
+        };
+    }
+    rpc ImportKeystore (ImportKeystoreRequest) returns (ImportKeystoreResponse) {
+        option (google.api.http) = {
+            post:"/v1/wallets/import"
+            body:"*"
+        };
+    }
+    rpc GetKeystore (google.protobuf.Empty) returns (GetKeystoreResponse) {
+        option (google.api.http) = {
+            get:"/v1/wallets"
+        };
+    }
+    rpc UnlockWallet (UnlockWalletRequest) returns (UnlockWalletResponse) {
+        option (google.api.http) = {
+            post:"/v1/wallets/unlocking"
+            body:"*"
+        };
+    }
+    rpc LockWallet (google.protobuf.Empty) returns (LockWalletResponse) {
+        option (google.api.http) = {
+            post:"/v1/wallets/locking"
+            body:"*"
+        };
+    }
+    rpc ChangePrivatePass (ChangePrivatePassRequest) returns (ChangePrivatePassResponse) {
+        option (google.api.http) = {
+            post:"/v1/wallets/privpass/changing"
+            body:"*"
+        };
+    }
+    rpc ChangePublicPass (ChangePublicPassRequest) returns (ChangePublicPassResponse) {
+        option (google.api.http) = {
+            post:"/v1/wallets/pubpass/changing"
+            body:"*"
+        };
+    }
+}
+
+message GetBlockHashByHeightRequest {
+    uint64 height = 1;
+}
+
+message GetBlockHashByHeightResponse {
+    string hash = 1;
+}
+
+message GetBestBlockResponse {
+    string hash = 1;
+    uint64 height = 2;
+}
+
+message GetBestBlockHashResponse {
+    string hash = 1;
+}
+
+message GetBlockRequest {
+    string hash = 1;
+}
+
+message GetBlockByHeightRequest {
+    uint64 height = 1;
+}
+
+message Proof {
+    string x = 1;
+    string x_prime = 2;
+    uint32 bit_length = 3;
+}
+
+message PoCSignature {
+    string r = 1;
+    string s = 2;
+}
+
+message BlockInfoForTx {
+    uint64 height = 1;
+    string block_hash = 2;
+    int64 timestamp = 3;
+}
+
+message Vin {
+    string txid = 1;
+    uint32 vout = 2;
+    uint64 sequence = 3;
+    repeated string witness = 4;
+}
+
+message ToAddressForTx {
+    repeated string address = 1;
+    string value = 2;
+}
+
+message InputsInTx {
+    string txid = 1;
+    uint32 index = 2;
+    repeated string address = 3;
+    string value = 4;
+}
+
+message ScriptPubKeyResult {
+    string asm = 1;
+    string hex = 2;
+    uint32 req_sigs = 3;
+    string type = 4;
+    uint32 frozen_period = 5;
+    string reward_address = 6;
+    repeated string addresses = 7;
+}
+
+message Vout {
+    string value = 1;
+    uint32 n = 2;
+    ScriptPubKeyResult script_public_key = 3;
+}
+
+message TxRawResult {
+	string txid = 1;
+	uint32 version = 2;
+	uint64 lock_time = 3;
+    BlockInfoForTx block = 4;
+	repeated Vin vin = 5;
+	repeated Vout vout = 6;
+    repeated string from_address = 7;
+    repeated ToAddressForTx to = 8;
+    repeated InputsInTx inputs = 9;
+    string payload = 10;
+	uint64 confirmations = 11;
+    uint32 size = 12;
+    string fee = 13;
+    int32 status = 14;
+    int32 type = 15;
+}
+
+message Header {
+    string hash = 1;
+    string chain_id = 2;
+    uint64 version = 3;
+    uint64 height = 4;
+    int64 time = 5;
+    string previous_hash = 6;
+    string transaction_root = 7;
+    string witness_root = 8;
+    string proposal_root = 9;
+    string target = 10;
+    string challenge = 11;
+    string public_key = 12;
+    Proof proof = 13;
+    PoCSignature block_signature = 14;
+    repeated string ban_list = 15;
+}
+
+message FaultPubKey {
+    uint32 version = 1;
+    uint32 proposal_type = 2;
+    string public_key = 3;
+    repeated Header testimony = 4;
+}
+
+message NormalProposal {
+    uint32 version = 1;
+    uint32 proposal_type = 2;
+    string data = 3;
+}
+
+message ProposalArea {
+    repeated FaultPubKey punishment_area = 1;
+    repeated NormalProposal other_area = 2;
+}
+
+message GetBlockResponse {
+    string hash = 1;
+    string chain_id = 2;
+    uint64 version = 3;
+    uint64 height = 4;
+    uint64 confirmations = 5;
+    int64 time = 6;
+    string previous_hash = 7;
+    string next_hash = 8;
+    string transaction_root = 9;
+    string witness_root = 10;
+    string proposal_root = 11;
+    string target = 12;
+    string quality = 13;
+    string challenge = 14;
+    string public_key = 15;
+    Proof proof = 16;
+    PoCSignature block_signature = 17;
+    repeated string ban_list = 18;
+    ProposalArea proposal_area = 19;
+    repeated string tx = 20;
+    repeated TxRawResult raw_tx = 21;
+    uint32 size = 22;
+    string time_utc = 23;
+    uint32 tx_count = 24;
+}
+
+message GetBlockHeaderRequest {
+    string hash = 1;
+}
+
+message GetBlockHeaderResponse {
+    string hash = 1;
+    string chain_id = 2;
+    uint64 version = 3;
+    uint64 height = 4;
+    uint64 confirmations = 5;
+    int64 timestamp = 6;
+    string previous_hash = 7;
+    string next_hash = 8;
+    string transaction_root = 9;
+    string witness_root = 10;
+    string proposal_root = 11;
+    string target = 12;
+    string quality = 13;
+    string challenge = 14;
+    string public_key = 15;
+    Proof proof = 16;
+    PoCSignature block_signature = 17;
+    repeated string ban_list = 18;
+    string time_utc = 19;
+}
+
+message GetBlockRequestV2 {
+    string id = 1;
+}
+
+message GetBlockResponseV2 {
+    string previous = 1;
+    string next = 2;
+    uint64 confirmations = 3;
+    uint32 plain_size = 4;
+    uint32 packet_size = 5;
+    string hash = 6;
+    string chain_id = 7;
+    uint64 version = 8;
+    uint64 height = 9;
+    int64  timestamp = 10;
+    string time_utc = 11;
+    string transaction_root = 12;
+    string witness_root = 13;
+    string proposal_root = 14;
+    string target = 15;
+    string quality = 16;
+    string challenge = 17;
+    string public_key = 18;
+    Proof  proof = 19;
+    PoCSignature signature = 20;
+    repeated string ban_list = 21;
+    ProposalArea proposals = 22;
+    uint32 tx_count = 23;
+    repeated string txids = 24;
+}
+
+message TxOutPoint {
+    string txid  = 1;
+    uint32 index = 2;
+}
+
+message GetTxDescVerbose0Response {
+    string txid = 1;
+    uint32 plain_size = 2;
+    uint32 packet_size = 3;
+    int64  time = 4;
+    uint64 height = 5;
+    string fee = 6;
+    double starting_priority = 7;
+    int64  total_input_age = 8;
+}
+
+message GetTxDescVerbose1Response {
+    string txid = 1;
+    uint32 plain_size = 2;
+    uint32 packet_size = 3;
+    int64 time = 4;
+    uint64 height = 5;
+    string fee = 6;
+    double starting_priority = 7;
+    int64 total_input_age = 8;
+    double current_priority = 9;
+    repeated TxOutPoint depends = 10;
+}
+
+message GetOrphanTxDescResponse {
+    string txid = 1;
+    uint32 plain_size = 2;
+    uint32 packet_size = 3;
+    repeated TxOutPoint depends = 4;
+}
+
+message GetTxPoolResponse {
+    uint32 tx_count           = 1;
+    uint32 orphan_count       = 2;
+    uint64 tx_plain_size      = 3;
+    uint64 tx_packet_size     = 4;
+    uint64 orphan_plain_size  = 5;
+    uint64 orphan_packet_size = 6;
+    repeated string txs = 7;
+    repeated string orphans = 8;
+}
+
+message GetTxPoolVerbose0Response {
+    uint32 tx_count           = 1;
+    uint32 orphan_count       = 2;
+    uint64 tx_plain_size      = 3;
+    uint64 tx_packet_size     = 4;
+    uint64 orphan_plain_size  = 5;
+    uint64 orphan_packet_size = 6;
+    repeated string txs = 7;
+    repeated string orphans = 8;
+    repeated GetTxDescVerbose0Response tx_descs = 9;
+    repeated GetOrphanTxDescResponse orphan_descs = 10;
+}
+
+message GetTxPoolVerbose1Response {
+    uint32 tx_count           = 1;
+    uint32 orphan_count       = 2;
+    uint64 tx_plain_size      = 3;
+    uint64 tx_packet_size     = 4;
+    uint64 orphan_plain_size  = 5;
+    uint64 orphan_packet_size = 6;
+    repeated string txs = 7;
+    repeated string orphans = 8;
+    repeated GetTxDescVerbose1Response tx_descs = 9;
+    repeated GetOrphanTxDescResponse orphan_descs = 10;
+}
+
+message ConfigureSpaceKeeperRequest {
+    uint64 capacity = 1;
+    repeated string payout_addresses = 2;
+    string passphrase = 3;
+}
+
+message WorkSpace {
+    int64  ordinal    = 1;
+    string public_key = 2;
+    string address    = 3;
+    uint32 bit_length = 4;
+    string state      = 5;
+    double progress   = 6;
+}
+
+message WorkSpaceRequest {
+    string space_id = 1;
+}
+
+message WorkSpaceResponse {
+    WorkSpace space = 1;
+    uint32 error_code = 2;
+    string error_message = 3;
+}
+
+message WorkSpacesResponse {
+    uint32 space_count = 1;
+    repeated WorkSpace spaces = 2;
+    uint32 error_code = 3;
+    string error_message = 4;
+}
+
+message ActOnSpaceKeeperResponse {
+    uint32 error_code    = 1;
+    string error_message = 2;
+}
+
+message GetClientStatusResponse{
+    message peerCountInfo {
+        uint32 total    = 1;
+        uint32 outbound = 2;
+        uint32 inbound  = 3;
+    }
+    message peerInfo {
+        string id        = 1;
+        string address   = 2;
+        string direction = 3;
+    }
+    message peerList {
+        repeated peerInfo outbound = 1;
+        repeated peerInfo inbound  = 2;
+        repeated peerInfo other    = 3;
+    }
+    string version           = 1;
+    bool peer_listening       = 2;
+    bool syncing             = 3;
+    bool mining              = 4;
+    bool space_keeping        = 5;
+    string chain_id           = 6;
+    uint64 local_best_height   = 7;
+    uint64 known_best_height   = 8;
+    string p2p_id             = 9;
+    peerCountInfo peer_count  = 10;
+    peerList peers           = 11;
+}
+
+message QuitClientResponse{
+    uint32 error_code = 1;
+    string msg  = 2;
+}
+
+message GetBlockHeightByPubKeyRequest {
+    string public_key = 1;
+}
+
+message GetBlockHeightByPubKeyResponse {
+    repeated uint64 heights = 1;
+}
+
+message GetCoinbaseRequest {
+    uint64 height = 1;
+}
+
+message CoinbaseVout {
+    string value = 1;
+    uint32 n = 2;
+    ScriptPubKeyResult script_public_key = 3;
+    string type = 4;
+}
+
+message GetCoinbaseResponse {
+    string txid = 1;
+    uint32 version = 2;
+    uint64 lock_time = 3;
+    BlockInfoForTx block = 4;
+    string binding_value = 5;
+    repeated Vin vin = 6;
+    repeated CoinbaseVout vout = 7;
+    string payload = 8;
+    uint64 confirmations = 9;
+    uint32 size = 10;
+    string total_fees = 11;
+    int32 status = 12;
+}
+
+message ExportKeystoreRequest {
+    string wallet_id = 1;
+    string passphrase = 2;
+    string export_path = 3;
+}
+
+message ExportKeystoreResponse {
+    string keystore = 1;
+}
+
+message ImportKeystoreRequest {
+    string import_path = 1;
+    string old_passphrase = 2;
+    string new_passphrase = 3;
+}
+
+message ImportKeystoreResponse {
+    bool status = 1;
+    string wallet_id = 2;
+    string remark = 3;
+}
+
+message WalletSummary {
+    string wallet_id = 1;
+    string remark = 2; // optional
+}
+
+message GetKeystoreResponse {
+    repeated WalletSummary wallets = 1;
+}
+
+message UnlockWalletRequest {
+     string passphrase = 1;
+}
+
+message UnlockWalletResponse {
+    bool success = 1;
+    string error = 2;
+}
+
+message LockWalletResponse {
+    bool success = 1;
+    string error = 2;
+}
+
+message ChangePrivatePassRequest{
+    string old_privpass = 1;
+    string new_privpass = 2;
+}
+
+message ChangePrivatePassResponse {
+    bool success = 1;
+}
+
+message ChangePublicPassRequest {
+    string old_pubpass = 1;
+    string new_pubpass = 2;
+}
+
+message ChangePublicPassResponse {
+    bool success = 1;
+}

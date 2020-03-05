@@ -1,0 +1,105 @@
+syntax = "proto3";
+package wirepb;
+
+// Proto for Blocks
+message Block {
+    BlockHeader  header       = 1;
+    ProposalArea Proposals    = 2;
+    repeated Tx  Transactions = 3;
+}
+
+// Proto for BlockHeaders
+message BlockHeader {
+    Hash                chain_id         = 1;
+    uint64              version          = 2;
+    uint64              height           = 3;
+    uint64              timestamp        = 4;
+    Hash                previous         = 5;
+    Hash                transaction_root = 6;
+    Hash                witness_root     = 7;
+    Hash                proposal_root    = 8;
+    BigInt              target           = 9;
+    Hash                challenge        = 10;
+    PublicKey           pub_key          = 11;
+    Proof               proof            = 12;
+    Signature           signature        = 14;
+    repeated  PublicKey ban_list         = 15;
+}
+
+// Proto for Hashes
+message Hash {
+    fixed64 s0 = 1;
+    fixed64 s1 = 2;
+    fixed64 s2 = 3;
+    fixed64 s3 = 4;
+}
+
+// Proto for Proofs
+message Proof {
+    bytes  x          = 1;
+    bytes  x_prime    = 2;
+    uint32 bit_length = 3;
+}
+
+// Proto for Crypto
+message PublicKey {
+    bytes raw = 1;
+}
+
+message Signature {
+    bytes raw = 1;
+}
+
+// Proto for BigInt
+message BigInt {
+    bytes raw = 1;
+}
+
+// Proto for ProposalAreas
+message ProposalArea {
+    repeated Punishment punishments     = 1;
+    repeated Proposal   other_proposals = 2;
+}
+
+message Proposal {
+    uint32 version = 1;
+    uint32 type    = 2;
+    bytes content = 3;
+}
+
+message Punishment {
+    uint32      version     = 1;
+    uint32      type        = 2;
+    BlockHeader testimony_a = 3;
+    BlockHeader testimony_b = 4;
+}
+
+// Proto for Transactions
+message Tx {
+    uint32         version   = 1;
+    repeated TxIn  tx_in     = 2;
+    repeated TxOut tx_out    = 3;
+    uint64         lock_time = 4;
+    bytes          payload   = 5;
+}
+
+message OutPoint {
+    Hash   hash  = 1;
+    uint32 index = 2;
+}
+
+message TxIn {
+    OutPoint       previous_out_point = 1;
+    repeated bytes witness            = 2;
+    fixed64        sequence           = 3;
+}
+
+message TxOut {
+    int64 value     = 1;
+    bytes pk_script = 2;
+}
+
+message BlockBase {
+    BlockHeader  header    = 1;
+    ProposalArea proposals = 2;
+}

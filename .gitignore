@@ -1,0 +1,14 @@
+# IDE Files
+.idea/
+.vscode/
+
+# Binaries
+bin/
+
+# Darwin
+.DS_Store
+
+# Reports
+lint.report
+test.report
+

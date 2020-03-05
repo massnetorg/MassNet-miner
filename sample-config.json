@@ -1,0 +1,31 @@
+{
+  "app": {
+    "profile": "6061",
+    "pub_password": "yourPubPassword"
+  },
+  "network": {
+    "p2p": {
+      "seeds": "",
+      "listen_address": "tcp://0.0.0.0:43453",
+      "skip_upnp": false
+    },
+    "api": {
+      "api_port_grpc": "9685",
+      "api_port_http": "9686",
+      "api_whitelist": [],
+      "api_allowed_lan": []
+    }
+  },
+  "log": {
+    "log_level": "info",
+    "disable_cprint": false
+  },
+  "miner": {
+    "mining_addr": [],
+    "generate": false,
+    "allow_solo": false,
+    "proof_list": "",
+    "plot": false,
+    "private_password": "yourPrivatePassword"
+  }
+}

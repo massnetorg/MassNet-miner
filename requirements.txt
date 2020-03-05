@@ -1,0 +1,13 @@
+# libprotoc
+libprotoc 3.6.1
+
+# github.com/golang/protobuf 1.3.2
+protoc-gen-go
+
+# github.com/gogo/protobuf 1.2.1
+protoc-gen-gogo
+protoc-gen-gofast
+
+# github.com/grpc-ecosystem/grpc-gateway 1.9.6
+protoc-gen-grpc-gateway
+protoc-gen-swagger
