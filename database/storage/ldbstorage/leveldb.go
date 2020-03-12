@@ -44,9 +44,9 @@ func newLevelDB(path string, create bool) (store storage.Storage, err error) {
 
 	opts := &opt.Options{
 		Filter:             filter.NewBloomFilter(10),
-		WriteBuffer:        16 * opt.MiB,
-		BlockSize:          4 * opt.KiB,
-		BlockCacheCapacity: 128 * opt.MiB,
+		WriteBuffer:        128 * opt.MiB,
+		BlockSize:          32 * opt.KiB,
+		BlockCacheCapacity: 32 * opt.MiB,
 		BlockCacher:        opt.DefaultBlockCacher,
 		OpenFilesCacher:    opt.DefaultOpenFilesCacher,
 		Compression:        opt.DefaultCompression,
