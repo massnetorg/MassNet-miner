@@ -470,7 +470,7 @@ func calcWitnessSignatureHash(subScript []parsedOpcode, sigHashes *TxSigHashes,
 	var bSequence [8]byte
 	binary.LittleEndian.PutUint64(bSequence[:], txIn.Sequence)
 	sigHash.Write(bSequence[:])
-	var bPayload []byte
+	var bPayload = make([]byte, len(tx.Payload))
 	copy(bPayload, tx.Payload)
 	sigHash.Write(bPayload)
 	// If the current signature mode isn't single, or none, then we can
