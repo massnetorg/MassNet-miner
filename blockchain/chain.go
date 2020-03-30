@@ -455,6 +455,7 @@ func (chain *Blockchain) connectBestChain(node *BlockNode, block *massutil.Block
 
 		// Connect the block to the main chain.
 		chain.l.Lock()
+		defer chain.l.Unlock()
 		if err = chain.connectBlock(node, block); err != nil {
 			return err
 		}
@@ -462,7 +463,6 @@ func (chain *Blockchain) connectBestChain(node *BlockNode, block *massutil.Block
 		if err = chain.blockTree.attachBlockNode(node); err != nil {
 			return err
 		}
-		chain.l.Unlock()
 
 		// Broadcast new block on best chain
 		chain.cond.Broadcast()
