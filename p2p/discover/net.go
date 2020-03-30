@@ -57,7 +57,9 @@ type Network struct {
 	topictab      *topicTable
 	ticketStore   *ticketStore
 	nursery       []*Node
+	nurseryIPPort map[string]int   // <ip,port> -> node index in nursery
 	nodes         map[NodeID]*Node // tracks active nodes with state != known
+	nodesIPPort   map[string]*Node // <ip,port> -> node
 	timeoutTimers map[timeoutEvent]*time.Timer
 
 	// Revalidation queues.
@@ -140,6 +142,7 @@ func newNetwork(conn transport, netdb NetworkDB, netrestrict *netutil.Netlist) (
 		topicRegisterReq: make(chan topicRegisterReq),
 		topicSearchReq:   make(chan topicSearchReq),
 		nodes:            make(map[NodeID]*Node),
+		nodesIPPort:      make(map[string]*Node),
 	}
 	go net.loop()
 	return net, nil
@@ -595,6 +598,10 @@ loop:
 			logging.CPrint(logging.DEBUG, "<-net.refreshReq")
 			if newNursery != nil {
 				net.nursery = newNursery
+				net.nurseryIPPort = make(map[string]int)
+				for i, n := range net.nursery {
+					net.nurseryIPPort[ipPortStr(n.IP, n.TCP, n.UDP)] = i
+				}
 			}
 			if refreshDone == nil {
 				refreshDone = make(chan struct{})
@@ -674,6 +681,29 @@ func (net *Network) refresh(done chan<- struct{}) {
 
 // Node Interning.
 
+func (net *Network) internNodeWithNewID(id NodeID, ip net.IP, tcp, udp uint16) *Node {
+	ipPort := ipPortStr(ip, tcp, udp)
+	var nn *Node
+	if index, ok := net.nurseryIPPort[ipPort]; ok {
+		// deal with situation that node is in nursery
+		nn = net.nursery[index]
+	} else if nn, ok = net.nodesIPPort[ipPort]; !ok {
+		return nil
+	}
+	// delete old node from nodes
+	delete(net.nodes, nn.ID)
+	// delete node from dht table
+	net.tab.delete(nn)
+	// reset node id & state
+	nn.setID(id)
+	nn.state = unknown
+	// add index
+	net.nodes[nn.ID] = nn
+	net.nodesIPPort[ipPort] = nn
+	net.tab.add(nn)
+	return nn
+}
+
 func (net *Network) internNode(pkt *ingressPacket) *Node {
 	if n := net.nodes[pkt.remoteID]; n != nil {
 		n.IP = pkt.remoteAddr.IP
@@ -681,9 +711,13 @@ func (net *Network) internNode(pkt *ingressPacket) *Node {
 		n.TCP = uint16(pkt.remoteAddr.Port)
 		return n
 	}
+	if n := net.internNodeWithNewID(pkt.remoteID, pkt.remoteAddr.IP, uint16(pkt.remoteAddr.Port), uint16(pkt.remoteAddr.Port)); n != nil {
+		return n
+	}
 	n := NewNode(pkt.remoteID, pkt.remoteAddr.IP, uint16(pkt.remoteAddr.Port), uint16(pkt.remoteAddr.Port))
 	n.state = unknown
 	net.nodes[pkt.remoteID] = n
+	net.nodesIPPort[ipPortStr(n.IP, n.TCP, n.UDP)] = n
 	return n
 }
 
@@ -694,6 +728,7 @@ func (net *Network) internNodeFromDB(dbn *Node) *Node {
 	n := NewNode(dbn.ID, dbn.IP, dbn.UDP, dbn.TCP)
 	n.state = unknown
 	net.nodes[n.ID] = n
+	net.nodesIPPort[ipPortStr(n.IP, n.TCP, n.UDP)] = n
 	return n
 }
 
@@ -714,6 +749,7 @@ func (net *Network) internNodeFromNeighbours(sender *net.UDPAddr, rn rpcNode) (n
 		if err == nil {
 			n.state = unknown
 			net.nodes[n.ID] = n
+			net.nodesIPPort[ipPortStr(n.IP, n.TCP, n.UDP)] = n
 		}
 		return n, err
 	}
@@ -1212,6 +1248,10 @@ func wireHash(x interface{}) (h Hash, n int, err error) {
 	gowire.WriteBinary(x, hw, &n, &err)
 	hw.Sum(h[:0])
 	return h, n, err
+}
+
+func ipPortStr(ip net.IP, tcp, udp uint16) string {
+	return fmt.Sprintf("(%s,%d,%d)", ip.String(), tcp, udp)
 }
 
 func (net *Network) handleNeighboursPacket(n *Node, pkt *ingressPacket) error {
