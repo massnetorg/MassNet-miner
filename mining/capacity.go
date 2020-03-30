@@ -14,6 +14,7 @@ type SpaceKeeper interface {
 	Configured() bool
 	ConfigureByBitLength(BlCount map[int]int, execPlot, execMine bool) ([]engine.WorkSpaceInfo, error)
 	ConfigureBySize(targetSize int, password string) ([]engine.WorkSpaceInfo, error)
+	AvailableDiskSize() (uint64, error)
 }
 
 type ConfigurableSpaceKeeper struct {
@@ -48,6 +49,16 @@ func (csk *ConfigurableSpaceKeeper) ConfigureBySize(targetSize int, password str
 		return nil, err
 	}
 	return sk.ConfigureBySize(targetSize, password)
+}
+
+
+func (csk *ConfigurableSpaceKeeper) AvailableDiskSize() (uint64, error) {
+	sk, err := getInstance(csk.SpaceKeeper)
+	if err != nil {
+		logging.CPrint(logging.ERROR, "fail to assert SpaceKeeper type", logging.LogFormat{"actual": reflect.TypeOf(sk)})
+		return 0, err
+	}
+	return sk.AvailableDiskSize(), nil
 }
 
 func getInstance(sk spacekeeper.SpaceKeeper) (*capacity.SpaceKeeper, error) {

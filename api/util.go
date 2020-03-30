@@ -12,6 +12,8 @@ import (
 	"massnet.org/mass/logging"
 	"massnet.org/mass/massutil"
 	"massnet.org/mass/massutil/safetype"
+	"massnet.org/mass/mining"
+	"massnet.org/mass/poc"
 )
 
 const (
@@ -234,6 +236,22 @@ func checkBlockIDLen(id string) error {
 		})
 		st := status.New(ErrAPIInvalidHash, ErrCode[ErrAPIInvalidHash])
 		return st.Err()
+	}
+	return nil
+}
+
+
+func checkMinerDiskSize(sk mining.SpaceKeeper, requiredMiBytes uint64) error {
+	var requiredBytes = requiredMiBytes * poc.MiB
+	if requiredBytes < uint64(poc.MinDiskSize) {
+		return status.New(ErrAPIMinerInvalidCapacity, "capacity should be no less than 96 MiB").Err()
+	}
+	availableBytes, err := sk.AvailableDiskSize()
+	if err != nil {
+		return status.New(ErrAPIMinerInternal, err.Error()).Err()
+	}
+	if requiredBytes > availableBytes {
+		return status.New(ErrAPIMinerInvalidCapacity, "capacity should be on larger than available disk size").Err()
 	}
 	return nil
 }

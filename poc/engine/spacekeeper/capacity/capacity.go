@@ -507,6 +507,16 @@ func (sk *SpaceKeeper) ResetDBDirs(dbDirs []string) error {
 
 }
 
+
+// TODO: should consider pending workspaces
+func (sk *SpaceKeeper) AvailableDiskSize() uint64 {
+	info, err := disk.Usage(sk.dbDirs[0])
+	if err != nil {
+		return 0
+	}
+	return info.Free
+}
+
 // TODO: consider more check items
 func (sk *SpaceKeeper) checkOSDiskSize(requiredBytes int) error {
 	if requiredBytes < 0 {

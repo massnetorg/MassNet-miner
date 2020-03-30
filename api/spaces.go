@@ -38,11 +38,10 @@ func (s *Server) ConfigureCapacity(ctx context.Context, in *pb.ConfigureSpaceKee
 	}
 
 	var diskSize = in.Capacity * poc.MiB
-	if int(diskSize) < poc.MinDiskSize {
-		logging.CPrint(logging.ERROR, "Capacity lower than MinDiskSize", logging.LogFormat{"capacity": in.Capacity})
-		return nil, status.New(ErrAPIMinerInvalidCapacity, ErrCode[ErrAPIMinerInvalidCapacity]).Err()
+	if err = checkMinerDiskSize(s.spaceKeeper, in.Capacity); err != nil {
+		logging.CPrint(logging.ERROR, "invalid capacity size", logging.LogFormat{"err": err, "capacity": in.Capacity})
+		return nil, err
 	}
-	// TODO: check disk size (SpaceKeeper would check size, still do it here?)
 	if s.spaceKeeper.Started() {
 		logging.CPrint(logging.ERROR, "cannot configure while capacity is running")
 		return nil, status.New(ErrAPIMinerNotStopped, ErrCode[ErrAPIMinerNotStopped]).Err()

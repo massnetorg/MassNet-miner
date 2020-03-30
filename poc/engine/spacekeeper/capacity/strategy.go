@@ -153,7 +153,7 @@ func generateInitialIndex(sk *SpaceKeeper, dbType, regStrB, suffixB string) erro
 			ws, err := NewWorkSpace(dbType, dbDir, int64(ordinal), pubKey, bitLength)
 			if err != nil {
 				logging.CPrint(logging.WARN, "fail on NewWorkSpace",
-					logging.LogFormat{"filePath": filePath, "err": err})
+					logging.LogFormat{"filepath": filePath, "err": err})
 				continue
 			}
 
