@@ -1,10 +1,12 @@
 # MassNet Miner
 
+[![Build Status](https://travis-ci.org/massnetorg/MassNet-miner.svg)](https://travis-ci.org/massnetorg/MassNet-miner) [![MIT](https://img.shields.io/badge/license-MIT-brightgreen.svg)](./LICENSE)
+
 `MassNet Miner` is a Golang implementation of MassNet full-node miner.
 
 ## Requirements
 
-[Go](http://golang.org) 1.11 or newer.
+[Go](http://golang.org) 1.13 or newer.
 
 ## Development
 
@@ -27,7 +29,7 @@
 
 #### Prerequisites
 
-- Install [Golang](http://golang.org) 1.11 or newer.
+- Install [Golang](http://golang.org) 1.13 or newer.
 - Install the specific version or [ProtoBuf](https://developers.google.com/protocol-buffers), and related `protoc-*`:
   ```
   # libprotoc
@@ -47,7 +49,7 @@
 
 #### Modifying Code
 
-- New codes should be compatible with Go 1.11 or newer.
+- New codes should be compatible with Go 1.13 or newer.
 - Run `gofmt` and `goimports` to lint go files.
 - Run `make test` before building executables.
 
