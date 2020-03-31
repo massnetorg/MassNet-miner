@@ -27,11 +27,6 @@ func TestSeed(t *testing.T) {
 			err:         nil,
 		},
 		{
-			seed:        "non-existed-web.com:43453",
-			defaultPort: "43453",
-			err:         errors.New("lookup non-existed-web.com: no such host"),
-		},
-		{
 			seed:        "192.168.1.100",
 			defaultPort: "65536",
 			err:         errors.New("invalid port 65536"),
