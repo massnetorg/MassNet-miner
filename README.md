@@ -53,17 +53,25 @@
 
 #### Reporting Bugs
 
-Contact MASS community via community@massnet.org, and we will get back to you as soon as possible.
+Contact MASS community via community@massnet.org, and we will get back to you soon.
+
+#### Verifying Commits
+
+The following keys maybe trusted to commit code.
+
+| Name | Fingerprint |
+|------|-------------|
+| massnetorg | A8A9 5C74 1AB8 08D3 E6E6  5B6C F8A8 D5CF 14D0 C419 |
 
 ## Documentation
 
 ### API
 
-A document for API is provided [here](api/README.md).
+A documentation for API is provided [here](api/README.md).
 
 ### Transaction Scripts
 
-A document for Transaction Scripts is provided [here](docs/script_en.md).
+A documentation for Transaction Scripts is provided [here](docs/script_en.md).
 
 ## License
 
