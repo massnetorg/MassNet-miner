@@ -10,9 +10,9 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/panjf2000/ants"
 	"massnet.org/mass/config"
 	"massnet.org/mass/logging"
-	"massnet.org/mass/massutil/ccache"
 	"massnet.org/mass/massutil/service"
 	"massnet.org/mass/poc"
 	"massnet.org/mass/poc/engine"
@@ -34,6 +34,10 @@ func NewSpaceKeeperV1(args ...interface{}) (spacekeeper.SpaceKeeper, error) {
 	if err != nil {
 		return nil, err
 	}
+	workerPool, err := ants.NewPoolPreMalloc(maxPoolWorker)
+	if err != nil {
+		return nil, err
+	}
 	sk := &SpaceKeeper{
 		allowGenerateNewSpace: true,
 		dbDirs:                cfg.Miner.ProofDir,
@@ -43,8 +47,7 @@ func NewSpaceKeeperV1(args ...interface{}) (spacekeeper.SpaceKeeper, error) {
 		workSpaceList:         make([]*WorkSpace, 0),
 		queue:                 newPlotterQueue(),
 		newQueuedWorkSpaceCh:  make(chan *queuedWorkSpace, plotterMaxChanSize),
-		proofCache:            ccache.NewCCache(proofCacheSize),
-		workerPool:            NewWorkerPool(maxPoolWorker),
+		workerPool:            workerPool,
 		fileWatcher:           func() {},
 	}
 	sk.BaseService = service.NewBaseService(sk, TypeSpaceKeeperV1)
@@ -82,8 +85,6 @@ func NewSpaceKeeperV1(args ...interface{}) (spacekeeper.SpaceKeeper, error) {
 		}
 		logging.CPrint(logging.DEBUG, "try configure spaceKeeper", logging.LogFormat{"content": wsiList, "err": err, "method": configureMethod})
 	}
-
-	sk.runWorkerPool()
 
 	return sk, nil
 }

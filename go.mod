@@ -18,6 +18,7 @@ require (
 	github.com/lestrrat/go-strftime v0.0.0-20180220042222-ba3bf9c1d042 // indirect
 	github.com/massnetorg/tendermint v1.0.0
 	github.com/orcaman/concurrent-map v0.0.0-20190314100340-2693aad1ed75
+	github.com/panjf2000/ants v1.2.0
 	github.com/pkg/errors v0.8.1
 	github.com/rifflock/lfshook v0.0.0-20180920164130-b9218ef580f5
 	github.com/shirou/gopsutil v2.18.12+incompatible

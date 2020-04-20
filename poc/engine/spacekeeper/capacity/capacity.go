@@ -5,9 +5,9 @@ import (
 	"sync"
 	"sync/atomic"
 
+	"github.com/panjf2000/ants"
 	"github.com/shirou/gopsutil/disk"
 	"massnet.org/mass/logging"
-	"massnet.org/mass/massutil/ccache"
 	"massnet.org/mass/massutil/service"
 	"massnet.org/mass/poc"
 	"massnet.org/mass/poc/engine"
@@ -17,7 +17,6 @@ import (
 
 const (
 	plotterMaxChanSize = 1024
-	proofCacheSize     = 3000
 	maxPoolWorker      = 32
 	allState           = engine.LastState + 1 // allState includes all valid states
 )
@@ -46,8 +45,7 @@ type SpaceKeeper struct {
 	workSpaceList         []*WorkSpace
 	queue                 *plotterQueue
 	newQueuedWorkSpaceCh  chan *queuedWorkSpace
-	proofCache            *ccache.CCache
-	workerPool            *WorkerPool
+	workerPool            *ants.Pool
 	generateInitialIndex  func() error
 	fileWatcher           func()
 }
@@ -507,7 +505,6 @@ func (sk *SpaceKeeper) ResetDBDirs(dbDirs []string) error {
 
 }
 
-
 // TODO: should consider pending workspaces
 func (sk *SpaceKeeper) AvailableDiskSize() uint64 {
 	info, err := disk.Usage(sk.dbDirs[0])
@@ -562,53 +559,44 @@ func (sk *SpaceKeeper) getIndexedWorkSpaces() map[int][]*WorkSpace {
 }
 
 func (sk *SpaceKeeper) getProof(ws *WorkSpace, challenge pocutil.Hash) *engine.WorkSpaceProof {
-	var result *engine.WorkSpaceProof
-	cacheKey := ws.id.String() + challenge.String()
-	v, ok := sk.proofCache.Get(cacheKey)
-	if ok {
-		result = v.(*engine.WorkSpaceProof)
-	} else {
-		proof, err := ws.db.GetProof(challenge)
-		result = &engine.WorkSpaceProof{
-			SpaceID:   ws.id.String(),
-			Proof:     proof,
-			PublicKey: ws.id.PubKey(),
-			Ordinal:   ws.id.Ordinal(),
-			Error:     err,
-		}
-		sk.proofCache.Add(cacheKey, result)
+	proof, err := ws.db.GetProof(challenge)
+	result := &engine.WorkSpaceProof{
+		SpaceID:   ws.id.String(),
+		Proof:     proof,
+		PublicKey: ws.id.PubKey(),
+		Ordinal:   ws.id.Ordinal(),
+		Error:     err,
 	}
 	return result
 }
 
 func (sk *SpaceKeeper) getProofs(wsMap map[string]*WorkSpace, challenge pocutil.Hash) map[string]*engine.WorkSpaceProof {
-	logging.CPrint(logging.DEBUG, "generating thread pool jobs")
 	result := make(map[string]*engine.WorkSpaceProof)
-	jobList := make([]Job, 0, len(wsMap))
+	resultCh := make(chan *engine.WorkSpaceProof)
+	waitCh := make(chan struct{})
+	go func() {
+		for wsp := range resultCh {
+			result[wsp.SpaceID] = wsp
+		}
+		close(waitCh)
+	}()
 
 	var wg sync.WaitGroup
-	for sid, ws := range wsMap {
-		cacheKey := sid + challenge.String()
-		v, ok := sk.proofCache.Get(cacheKey)
-		if ok {
-			result[sid] = v.(*engine.WorkSpaceProof)
-		} else {
-			job := Job{ws: ws, cacheKey: cacheKey, challenge: challenge, proofCache: sk.proofCache, result: sk.workerPool.result, wg: &wg}
-			sk.workerPool.AddTask(job)
-			jobList = append(jobList, job)
+	for _, ws := range wsMap {
+		ws0 := ws
+		wg.Add(1)
+		if err := sk.workerPool.Submit(func() {
+			resultCh <- sk.getProof(ws0, challenge)
+			wg.Done()
+		}); err != nil {
+			// TODO: handle error?
+			wg.Done()
 		}
 	}
-	wg.Add(1) // prevent len(wsMap) == 0
-	wg.Done()
 	wg.Wait()
+	close(resultCh)
 
-	for _, job := range jobList {
-		v, ok := sk.proofCache.Get(job.cacheKey)
-		if ok {
-			result[job.ws.id.String()] = v.(*engine.WorkSpaceProof)
-		}
-	}
-
+	<-waitCh
 	return result
 }
 
