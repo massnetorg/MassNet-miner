@@ -14,6 +14,7 @@ import (
 	"massnet.org/mass/config"
 	"massnet.org/mass/database"
 	_ "massnet.org/mass/database/ldb"
+	"massnet.org/mass/database/storage"
 	_ "massnet.org/mass/database/storage/ldbstorage"
 	"massnet.org/mass/limits"
 	"massnet.org/mass/logging"
@@ -235,7 +236,7 @@ func warnMultipeDBs() {
 // such warning the user if there are multiple databases which consume space on
 // the file system and ensuring the regression test database is clean when in
 // regression test mode.
-func setupBlockDB() (database.Db, error) {
+func setupBlockDB() (database.Db, bool, error) {
 	// The memdb backend does not have a file path associated with it, so
 	// handle it uniquely.  We also don't want to worry about the multiple
 	// database type warnings when running with the memory database.
@@ -243,9 +244,9 @@ func setupBlockDB() (database.Db, error) {
 		logging.CPrint(logging.INFO, "creating block database in memory")
 		db, err := database.CreateDB(cfg.Db.DbType)
 		if err != nil {
-			return nil, err
+			return nil, false, err
 		}
-		return db, nil
+		return db, false, nil
 	}
 
 	warnMultipeDBs()
@@ -257,32 +258,28 @@ func setupBlockDB() (database.Db, error) {
 	// each run, so remove it now if it already exists.
 	//removeRegressionDB(dbPath)
 
-	logging.CPrint(logging.INFO, "loading block database", logging.LogFormat{"from": dbPath})
+	needUpgrade, err := checkVersion(cfg.Db.DbType, cfg.Db.DataDir)
+	if err != nil {
+		logging.CPrint(logging.ERROR, "check db version failed", logging.LogFormat{"err": err, "path": dbPath})
+		return nil, false, err
+	}
+
 	db, err := database.OpenDB(cfg.Db.DbType, dbPath)
 	if err != nil {
-		// Return the error if it's not because the database
-		// doesn't exist.
-		if err != database.ErrDbDoesNotExist {
-			return nil, err
-		}
-
-		// Create the db if it does not exist.
-		err = os.MkdirAll(cfg.Db.DataDir, 0700)
-		if err != nil {
-			return nil, err
-		}
+		logging.CPrint(logging.WARN, "open db failed", logging.LogFormat{"err": err, "path": dbPath})
 		db, err = database.CreateDB(cfg.Db.DbType, dbPath)
 		if err != nil {
-			return nil, err
+			logging.CPrint(logging.ERROR, "create db failed", logging.LogFormat{"err": err, "path": dbPath})
+			return nil, false, err
 		}
 	}
 
-	return db, nil
+	return db, needUpgrade, nil
 }
 
 // loadBlockDB opens the block database and returns a handle to it.
 func loadBlockDB() (database.Db, error) {
-	db, err := setupBlockDB()
+	db, needUpgrade, err := setupBlockDB()
 	if err != nil {
 		return nil, err
 	}
@@ -306,6 +303,20 @@ func loadBlockDB() (database.Db, error) {
 		height = 0
 	}
 
+	if needUpgrade {
+		err = db.IndexPubkbl(false)
+		if err != nil {
+			db.Close()
+			logging.CPrint(logging.ERROR, "IndexPubkbl error", logging.LogFormat{"err": err})
+			return nil, err
+		}
+		err = storage.WriteVersion(filepath.Join(cfg.Db.DataDir, ".ver"), cfg.Db.DbType, storage.CurrentStorageVersion)
+		if err != nil {
+			db.Close()
+			return nil, err
+		}
+	}
+
 	logging.CPrint(logging.INFO, "block database loaded with block height", logging.LogFormat{"height": height})
 	return db, nil
 }
@@ -318,4 +329,51 @@ func FileExists(name string) bool {
 		}
 	}
 	return true
+}
+
+func checkVersion(dbtype, dir string) (needUpgrade bool, err error) {
+	create := false
+	_, err = os.Stat(dir)
+	if err != nil {
+		if os.IsNotExist(err) {
+			os.MkdirAll(dir, 0700)
+		} else {
+			return false, err
+		}
+		create = true
+	} else {
+		verFile := filepath.Join(dir, ".ver")
+		_, err = os.Stat(verFile)
+		if err != nil {
+			if !os.IsNotExist(err) {
+				return false, err
+			}
+			create, err = transV1VerFile(dir, verFile)
+			if err != nil {
+				return false, err
+			}
+		}
+	}
+	err = storage.CheckVersion(dbtype, dir, create)
+	if err == storage.ErrUpgradeRequired {
+		return true, nil
+	}
+	return false, err
+}
+
+// transition code, it will be removed soon
+func transV1VerFile(dir, newPath string) (notExistV1 bool, err error) {
+	path := filepath.Join(dir, "blocks.db.ver")
+	tp, ver, err := storage.ReadVersion(path)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return true, nil
+		}
+		return true, err
+	}
+	err = storage.WriteVersion(newPath, tp, ver)
+	if err != nil {
+		return true, err
+	}
+	return false, nil
 }

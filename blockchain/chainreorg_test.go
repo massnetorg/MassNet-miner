@@ -390,6 +390,8 @@ func checkEntries(t *testing.T, entries map[string][]byte) {
 			prefix = "STG"
 		case strings.HasPrefix(key, "STSG"):
 			prefix = "STSG"
+		case strings.HasPrefix(key, "PUBKBL"):
+			prefix = "PUBKBL"
 		default:
 			t.Fatal(key, value)
 		}
@@ -451,6 +453,8 @@ func checkEntry(t *testing.T, prefix, key string, value []byte) {
 	case "STSG":
 		assert.Equal(t, 72, len(key))
 		assert.Equal(t, 0, len(value))
+	case "PUBKBL":
+		assert.Equal(t, 9, len(value))
 	default:
 		t.Fatal(prefix, key, value)
 	}

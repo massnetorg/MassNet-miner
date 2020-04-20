@@ -48,6 +48,7 @@ var (
 	ErrChainID                   = errors.New("block's chainID is not equal to expected chainID")
 	ErrBlockSIG                  = errors.New("block signature verify failed")
 	ErrInvalidBlockVersion       = errors.New("block's version is not valid")
+	ErrInvalidBitLength          = errors.New("block's bitLength is smaller than the last submission of this public key")
 
 	// BanList
 	ErrBannedPk      = errors.New("block builder puKey has been banned")

@@ -131,6 +131,11 @@ func (db *ChainDb) preCommit(hash *wire.Hash) error {
 	for i := range db.batches {
 		batch := db.Batch(i)
 		if !hash.IsEqual(&batch.block) {
+			logging.CPrint(logging.ERROR, "", logging.LogFormat{
+				"i":     i,
+				"hash":  hash,
+				"batch": &batch.block,
+			})
 			return ErrCommitHashNotEqual
 		}
 		if !batch.done {

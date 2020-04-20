@@ -62,7 +62,7 @@ func (db *ChainDb) submitBlock(block *massutil.Block) (err error) {
 	blockHash := block.Hash()
 	mBlock := block.MsgBlock()
 
-	rawMsg, err := block.Bytes(wire.DB)
+	rawMsg, err := mBlock.Bytes(wire.DB)
 	if err != nil {
 		logging.CPrint(logging.WARN, "failed to obtain raw block bytes", logging.LogFormat{"block": blockHash})
 		return err
@@ -87,6 +87,11 @@ func (db *ChainDb) submitBlock(block *massutil.Block) (err error) {
 		return err
 	}
 	if err = dropPunishments(batch, faultPks); err != nil {
+		return err
+	}
+
+	// put pk, bitLength and height into batch
+	if err = db.insertPubkblToBatch(batch, block.MsgBlock().Header.PubKey, block.MsgBlock().Header.Proof.BitLength, newHeight); err != nil {
 		return err
 	}
 
@@ -228,6 +233,11 @@ func (db *ChainDb) deleteBlock(hash *wire.Hash) (err error) {
 	}
 
 	if err = db.freeze(height); err != nil {
+		return err
+	}
+
+	// remove pk, bitLength and height
+	if err = db.removePubkblWithCheck(batch, blk.MsgBlock().Header.PubKey, blk.MsgBlock().Header.Proof.BitLength, height); err != nil {
 		return err
 	}
 
@@ -606,4 +616,77 @@ func (db *ChainDb) NewestSha() (rSha *wire.Hash, rBlkHeight uint64, err error) {
 	sha := db.dbStorageMeta.currentHash
 
 	return &sha, db.dbStorageMeta.currentHeight, nil
+}
+
+// transition code that will be removed soon
+func (db *ChainDb) IndexPubkbl(rebuild bool) error {
+	if db.dbStorageMeta.currentHeight == UnknownHeight {
+		return nil
+	}
+	height, err := db.fetchPubkblIndexProgress()
+	if err != nil {
+		return err
+	}
+	logging.CPrint(logging.INFO, "build block-bl index start", logging.LogFormat{
+		"current": height,
+		"rebuild": rebuild,
+	})
+
+	if rebuild {
+		err = db.deletePubkblIndexProgress()
+		if err != nil {
+			logging.CPrint(logging.ERROR, "deletePubkblIndexProgress error", logging.LogFormat{
+				"err": err,
+			})
+			return err
+		}
+	}
+
+	// If height is 0, make sure to clear residual pubkbl within last rebuild call.
+	if rebuild || height == 0 {
+		err = db.clearPubkbl()
+		if err != nil {
+			logging.CPrint(logging.ERROR, "clearPubkbl error", logging.LogFormat{
+				"err": err,
+			})
+			return err
+		}
+	}
+
+	db.dbLock.Lock()
+	defer db.dbLock.Unlock()
+
+	i := uint64(0)
+	if height != 0 {
+		i = height + 1
+	}
+	for ; i <= db.dbStorageMeta.currentHeight; i++ {
+		if i%1000 == 0 {
+			logging.CPrint(logging.DEBUG, "updating pk & bl index", logging.LogFormat{
+				"height": i,
+			})
+		}
+		_, buf, err := db.getBlkByHeight(i)
+		if err != nil {
+			return err
+		}
+		block, err := massutil.NewBlockFromBytes(buf, wire.DB)
+		if err != nil {
+			return err
+		}
+
+		err = db.insertPubkbl(block.MsgBlock().Header.PubKey, block.MsgBlock().Header.Proof.BitLength, block.Height())
+		if err != nil {
+			return err
+		}
+		err = db.updatePubkblIndexProgress(block.Height())
+		if err != nil {
+			return err
+		}
+	}
+	logging.CPrint(logging.INFO, "build block-bl index done", logging.LogFormat{
+		"current": i - 1,
+		"rebuild": rebuild,
+	})
+	return db.deletePubkblIndexProgress()
 }

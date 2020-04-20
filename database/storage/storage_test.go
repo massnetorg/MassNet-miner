@@ -548,7 +548,6 @@ func testOverwrite(t *testing.T) {
 
 func TestCheckVersion(t *testing.T) {
 	dbdir := "testDb"
-	dbpath := filepath.Join(dbdir, ".ver")
 	dbtype := "testdb"
 
 	tests := []struct {
@@ -560,7 +559,7 @@ func TestCheckVersion(t *testing.T) {
 		{
 			"normal",
 			dbtype,
-			dbpath,
+			dbdir,
 			nil,
 		},
 		{
@@ -572,8 +571,8 @@ func TestCheckVersion(t *testing.T) {
 		{
 			"incorrect dbtype",
 			"wrongtype",
-			dbpath,
-			storage.ErrVersionCheckFailed,
+			dbdir,
+			storage.ErrUnsupportedVersion,
 		},
 	}
 
@@ -584,7 +583,7 @@ func TestCheckVersion(t *testing.T) {
 		assert.Nil(t, err)
 	}()
 	// create
-	err = storage.CheckVersion(dbtype, dbpath, true)
+	err = storage.CheckVersion(dbtype, dbdir, true)
 	assert.Nil(t, err)
 
 	for _, test := range tests {

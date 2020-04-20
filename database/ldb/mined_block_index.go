@@ -33,11 +33,10 @@ func minedBlockIndexSearchKey(pubKey *pocec.PublicKey) []byte {
 
 func updateMinedBlockIndex(batch storage.Batch, connecting bool, pubKey *pocec.PublicKey, height uint64) error {
 	if connecting {
-		batch.Put(minedBlockIndexToKey(pubKey, height), blankData)
+		return batch.Put(minedBlockIndexToKey(pubKey, height), blankData)
 	} else {
-		batch.Delete(minedBlockIndexToKey(pubKey, height))
+		return batch.Delete(minedBlockIndexToKey(pubKey, height))
 	}
-	return nil
 }
 
 func (db *ChainDb) FetchMinedBlocks(pubKey *pocec.PublicKey) ([]uint64, error) {

@@ -1001,6 +1001,15 @@ func (chain *Blockchain) checkBlockHeaderContext(header *wire.BlockHeader, prevN
 		return ErrBannedPk
 	}
 
+	// check bitLength
+	err = chain.checkBitLength(prevNode, header.PubKey, header.Proof.BitLength)
+	if err != nil {
+		logging.CPrint(logging.ERROR, "invalid bitLength", logging.LogFormat{
+			"err": err,
+		})
+		return err
+	}
+
 	// Ensure Target
 	expectedTarget, err := calcNextTarget(prevNode, header.Timestamp)
 	if err != nil {
@@ -1623,6 +1632,44 @@ func (chain *Blockchain) checkProposalContext(banList []*pocec.PublicKey, prevNo
 		if err != nil {
 			return err
 		}
+	}
+	return nil
+}
+
+func (chain *Blockchain) checkBitLength(prevNode *BlockNode, publicKey *pocec.PublicKey, bitLength int) error {
+	blhs, err := chain.db.GetPubkeyBlRecord(publicKey)
+	if err != nil {
+		return err
+	}
+	if !prevNode.InMainChain {
+		_, attachNodes := chain.getReorganizeNodes(prevNode)
+		if len(blhs) > 0 {
+			forkHeight := attachNodes.Front().Value.(*BlockNode).Height - 1
+			for i := len(blhs) - 1; i >= 0; i-- {
+				if blhs[i].BlkHeight > forkHeight {
+					blhs = blhs[:i]
+				} else {
+					break
+				}
+			}
+		}
+		for e := attachNodes.Front(); e != nil; e = e.Next() {
+			n := e.Value.(*BlockNode)
+			if n.PubKey.IsEqual(publicKey) {
+				if len(blhs) == 0 || n.Proof.BitLength > blhs[len(blhs)-1].BitLength {
+					blhs = append(blhs, &database.BLHeight{
+						BitLength: n.Proof.BitLength,
+						BlkHeight: n.Height,
+					})
+				}
+			}
+		}
+	}
+	if len(blhs) == 0 {
+		return nil
+	}
+	if bitLength < blhs[len(blhs)-1].BitLength {
+		return ErrInvalidBitLength
 	}
 	return nil
 }

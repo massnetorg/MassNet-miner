@@ -561,7 +561,7 @@ func (sw *Switch) listenerRoutine(l Listener) {
 
 func (sw *Switch) dialPeerWorker(a *NetAddress, wg *sync.WaitGroup) {
 	if err := sw.DialPeerWithAddress(a); err != nil {
-		logging.CPrint(logging.ERROR, "dialPeerWorker fail on dial peer", logging.LogFormat{"addr": a, "err": err})
+		logging.CPrint(logging.WARN, "dialPeerWorker failed", logging.LogFormat{"addr": a, "err": err})
 	}
 	wg.Done()
 }

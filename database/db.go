@@ -192,6 +192,10 @@ type Db interface {
 
 	// For testing purpose
 	TestExportDbEntries() map[string][]byte
+
+	IndexPubkbl(rebuild bool) error
+
+	GetPubkeyBlRecord(*pocec.PublicKey) ([]*BLHeight, error)
 }
 
 // DriverDB defines a structure for backend drivers to use when they registered
@@ -307,4 +311,9 @@ type AddrIndexData struct {
 	TxIndex             TxAddrIndex
 	BindingTxIndex      BindingTxAddrIndex
 	BindingTxSpentIndex BindingTxSpentAddrIndex
+}
+
+type BLHeight struct {
+	BitLength int
+	BlkHeight uint64
 }

@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"path/filepath"
 
 	"massnet.org/mass/database"
 )
@@ -17,7 +18,7 @@ const (
 	GiB = MiB * 1024
 
 	// CurrentStorageVersion is the database version.
-	CurrentStorageVersion int32 = 1
+	CurrentStorageVersion int32 = 2
 )
 
 var (
@@ -27,7 +28,8 @@ var (
 	ErrInvalidBatch       = errors.New("invalid batch")
 	ErrInvalidArgument    = errors.New("invalid argument")
 	ErrNotFound           = errors.New("not found")
-	ErrVersionCheckFailed = errors.New("storage version check failed")
+	ErrUnsupportedVersion = errors.New("unsupported version")
+	ErrUpgradeRequired    = errors.New("storage need upgrade")
 )
 
 // Range is a key range.
@@ -121,10 +123,6 @@ func CreateStorage(dbtype, dbpath string, args ...interface{}) (s Storage, err e
 			if err != nil {
 				return nil, err
 			}
-			err = CheckVersion(dbtype, dbpath, true)
-			if err != nil {
-				return nil, err
-			}
 			return
 		}
 	}
@@ -133,10 +131,6 @@ func CreateStorage(dbtype, dbpath string, args ...interface{}) (s Storage, err e
 
 // CreateStorage opens an existing database.
 func OpenStorage(dbtype, dbpath string, args ...interface{}) (s Storage, err error) {
-	err = CheckVersion(dbtype, dbpath, false)
-	if err != nil {
-		return nil, err
-	}
 	for _, drv := range drivers {
 		if drv.DbType == dbtype {
 			return drv.OpenStorage(dbpath, args...)
@@ -158,8 +152,50 @@ type storageVersion struct {
 	Version int32  `json:"version,omitempty"`
 }
 
+func WriteVersion(path, dbtype string, version int32) error {
+	fo, err := os.Create(path)
+	if err != nil {
+		return fmt.Errorf("write ver file %s error: %v", path, err)
+	}
+	defer fo.Close()
+
+	b, err := json.Marshal(storageVersion{
+		Dbtype:  dbtype,
+		Version: version,
+	})
+	if err != nil {
+		return err
+	}
+	return binary.Write(fo, binary.LittleEndian, b)
+}
+
+func ReadVersion(path string) (string, int32, error) {
+	file, err := os.Open(path)
+	if err != nil {
+		return "", 0, err
+	}
+	defer file.Close()
+
+	fs, err := file.Stat()
+	if err != nil {
+		return "", 0, err
+	}
+	buf := make([]byte, fs.Size())
+	err = binary.Read(file, binary.LittleEndian, buf)
+	if err != nil {
+		return "", 0, err
+	}
+
+	var ver storageVersion
+	err = json.Unmarshal(buf, &ver)
+	if err != nil {
+		return "", 0, err
+	}
+	return ver.Dbtype, ver.Version, nil
+}
+
 func CheckVersion(dbtype, storPath string, create bool) error {
-	verFile := fmt.Sprintf("%s%s", storPath, ".ver")
+	verFile := filepath.Join(storPath, ".ver")
 	if create {
 		fo, err := os.Create(verFile)
 		if err != nil {
@@ -182,28 +218,32 @@ func CheckVersion(dbtype, storPath string, create bool) error {
 	if os.IsNotExist(err) {
 		return database.ErrDbDoesNotExist
 	}
-	if err == nil {
-		defer fi.Close()
-
-		fs, err := fi.Stat()
-		if err != nil {
-			return err
-		}
-		buf := make([]byte, fs.Size())
-		err = binary.Read(fi, binary.LittleEndian, buf)
-		if err != nil {
-			return fmt.Errorf("read version file error: %v", err)
-		}
-
-		var ver storageVersion
-		err = json.Unmarshal(buf, &ver)
-		if err != nil {
-			return fmt.Errorf("unmarshal failed: %v", err)
-		}
-
-		if ver.Version == CurrentStorageVersion && ver.Dbtype == dbtype {
-			return nil
-		}
+	if err != nil {
+		return err
 	}
-	return ErrVersionCheckFailed
+	defer fi.Close()
+
+	fs, err := fi.Stat()
+	if err != nil {
+		return err
+	}
+	buf := make([]byte, fs.Size())
+	err = binary.Read(fi, binary.LittleEndian, buf)
+	if err != nil {
+		return fmt.Errorf("read version file error: %v", err)
+	}
+
+	var ver storageVersion
+	err = json.Unmarshal(buf, &ver)
+	if err != nil {
+		return fmt.Errorf("unmarshal failed: %v", err)
+	}
+
+	if ver.Version == CurrentStorageVersion && ver.Dbtype == dbtype {
+		return nil
+	}
+	if ver.Version > CurrentStorageVersion || ver.Dbtype != dbtype {
+		return ErrUnsupportedVersion
+	}
+	return ErrUpgradeRequired
 }
