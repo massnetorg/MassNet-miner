@@ -8,10 +8,10 @@ import (
 	"net"
 	"time"
 
+	gowire "github.com/massnetorg/tendermint/go-wire"
 	"golang.org/x/crypto/sha3"
 	"massnet.org/mass/logging"
 	"massnet.org/mass/p2p/netutil"
-	gowire "github.com/massnetorg/tendermint/go-wire"
 )
 
 var (
@@ -21,6 +21,7 @@ var (
 )
 
 const (
+	minRefreshInterval    = 1 * time.Minute
 	autoRefreshInterval   = 1 * time.Hour
 	bucketRefreshInterval = 1 * time.Minute
 	seedCount             = 30
@@ -51,6 +52,7 @@ type Network struct {
 	tableOpResp      chan struct{}
 	topicRegisterReq chan topicRegisterReq
 	topicSearchReq   chan topicSearchReq
+	refreshCh        chan struct{}
 
 	// State of the main loop.
 	tab           *Table
@@ -123,14 +125,14 @@ func newNetwork(conn transport, netdb NetworkDB, netrestrict *netutil.Netlist) (
 	}
 	tab := newTable(db.self, conn.localAddr())
 	net := &Network{
-		db:               db,
-		conn:             conn,
-		netrestrict:      netrestrict,
-		tab:              tab,
-		topictab:         newTopicTable(db, tab.self),
-		ticketStore:      newTicketStore(),
-		refreshReq:       make(chan []*Node),
-		refreshResp:      make(chan (<-chan struct{})),
+		db:          db,
+		conn:        conn,
+		netrestrict: netrestrict,
+		tab:         tab,
+		topictab:    newTopicTable(db, tab.self),
+		ticketStore: newTicketStore(),
+		refreshReq:  make(chan []*Node),
+		refreshResp: make(chan (<-chan struct{})),
 		closed:           make(chan struct{}),
 		closeReq:         make(chan struct{}),
 		read:             make(chan ingressPacket, 100),
@@ -143,6 +145,7 @@ func newNetwork(conn transport, netdb NetworkDB, netrestrict *netutil.Netlist) (
 		topicSearchReq:   make(chan topicSearchReq),
 		nodes:            make(map[NodeID]*Node),
 		nodesIPPort:      make(map[string]*Node),
+		refreshCh:        make(chan struct{}, 1),
 	}
 	go net.loop()
 	return net, nil
@@ -168,6 +171,14 @@ func (net *Network) Self() *Node {
 // table. It will not write the same node more than once. The nodes in
 // the slice are copies and can be modified by the caller.
 func (net *Network) ReadRandomNodes(buf []*Node) (n int) {
+	if net.tab.count == 0 {
+		logging.CPrint(logging.DEBUG, "refresh for empty table")
+		select {
+		case net.refreshCh <- struct{}{}:
+		default:
+		}
+		return 0
+	}
 	net.reqTableOp(func() { n = net.tab.readRandomNodes(buf) })
 	return n
 }
@@ -341,9 +352,10 @@ const maxSearchCount = 5
 
 func (net *Network) loop() {
 	var (
-		refreshTimer       = time.NewTicker(autoRefreshInterval)
-		bucketRefreshTimer = time.NewTimer(bucketRefreshInterval)
-		refreshDone        chan struct{} // closed when the 'refresh' lookup has ended
+		nextRefreshAllowedAt = time.Now().Add(minRefreshInterval)
+		autoRefreshTicker    = time.NewTicker(autoRefreshInterval)
+		bucketRefreshTimer   = time.NewTimer(bucketRefreshInterval)
+		refreshDone          chan struct{} // closed when the 'refresh' lookup has ended
 	)
 
 	// Tracking the next ticket to register.
@@ -580,13 +592,22 @@ loop:
 			}
 
 			// Periodic / lookup-initiated bucket refresh.
-		case <-refreshTimer.C:
-			logging.CPrint(logging.DEBUG, "<-refreshTimer.C")
+		case <-autoRefreshTicker.C:
+			logging.CPrint(logging.DEBUG, "<-autoRefreshTicker.C")
 			// TODO: ideally we would start the refresh timer after
 			// fallback nodes have been set for the first time.
-			if refreshDone == nil {
-				refreshDone = make(chan struct{})
-				net.refresh(refreshDone)
+			select {
+			case net.refreshCh <- struct{}{}:
+			default:
+			}
+		case <-net.refreshCh:
+			now := time.Now()
+			if now.After(nextRefreshAllowedAt) {
+				if refreshDone == nil {
+					refreshDone = make(chan struct{})
+					net.refresh(refreshDone)
+				}
+				nextRefreshAllowedAt = now.Add(minRefreshInterval)
 			}
 		case <-bucketRefreshTimer.C:
 			target := net.tab.chooseBucketRefreshTarget()

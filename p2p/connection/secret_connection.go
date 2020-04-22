@@ -10,13 +10,13 @@ import (
 	"net"
 	"time"
 
+	"github.com/massnetorg/tendermint/go-crypto"
+	"github.com/massnetorg/tendermint/go-wire"
+	cmn "github.com/massnetorg/tendermint/tmlibs/common"
 	"golang.org/x/crypto/nacl/box"
 	"golang.org/x/crypto/nacl/secretbox"
 	"golang.org/x/crypto/ripemd160"
 	"massnet.org/mass/logging"
-	"github.com/massnetorg/tendermint/go-crypto"
-	"github.com/massnetorg/tendermint/go-wire"
-	cmn "github.com/massnetorg/tendermint/tmlibs/common"
 )
 
 const (
@@ -54,6 +54,7 @@ func MakeSecretConnection(conn io.ReadWriteCloser, locPrivKey crypto.PrivKeyEd25
 	// (see DJB's Curve25519 paper: http://cr.yp.to/ecdh/curve25519-20060209.pdf)
 	remEphPub, err := shareEphPubKey(conn, locEphPub)
 	if err != nil {
+		logging.CPrint(logging.ERROR, "shareEphPubKey failed", logging.LogFormat{"err": err})
 		return nil, err
 	}
 
@@ -84,6 +85,7 @@ func MakeSecretConnection(conn io.ReadWriteCloser, locPrivKey crypto.PrivKeyEd25
 	// Share (in secret) each other's pubkey & challenge signature
 	authSigMsg, err := shareAuthSignature(sc, locPubKey, locSignature)
 	if err != nil {
+		logging.CPrint(logging.ERROR, "shareAuthSignature failed", logging.LogFormat{"err": err})
 		return nil, err
 	}
 	remPubKey, remSignature := authSigMsg.Key, authSigMsg.Sig
@@ -257,41 +259,43 @@ func shareAuthSignature(sc *SecretConnection, pubKey crypto.PubKeyEd25519, signa
 		},
 	)
 
-	logging.CPrint(logging.INFO, "shareAuthSignature errors", logging.LogFormat{
-		"err1":          err1,
-		"err2":          err2,
-		"msg_bytes_len": msgBytesLen,
-		"recv_msg_len":  recvMsgLen,
-	})
 	if err1 != nil {
 		return nil, err1
 	}
 	if err2 != nil {
 		return nil, err2
 	}
+	logging.CPrint(logging.INFO, "shareAuthSignature info", logging.LogFormat{
+		"bytes_written": msgBytesLen,
+		"bytes_read":    recvMsgLen,
+	})
 	return &recvMsg, nil
 }
 
 func shareEphPubKey(conn io.ReadWriteCloser, locEphPub *[32]byte) (remEphPub *[32]byte, err error) {
 	var err1, err2 error
+	var nWritten, nRead int
 
 	cmn.Parallel(
 		func() {
-			_, err1 = conn.Write(locEphPub[:])
+			nWritten, err1 = conn.Write(locEphPub[:])
 		},
 		func() {
 			remEphPub = new([32]byte)
-			_, err2 = io.ReadFull(conn, remEphPub[:])
+			nRead, err2 = io.ReadFull(conn, remEphPub[:])
 		},
 	)
 
-	logging.CPrint(logging.INFO, "shareEphPubKey errors", logging.LogFormat{"err1": err1, "err2": err2})
 	if err1 != nil {
 		return nil, err1
 	}
 	if err2 != nil {
 		return nil, err2
 	}
+	logging.CPrint(logging.INFO, "shareEphPubKey info", logging.LogFormat{
+		"bytes_written": nWritten,
+		"bytes_read":    nRead,
+	})
 	return remEphPub, nil
 }
 
