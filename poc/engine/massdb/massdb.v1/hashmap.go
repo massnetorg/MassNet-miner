@@ -113,9 +113,15 @@ func createMapFile(filePath string, typ MapType, bl int, pubKey *pocec.PublicKey
 		return nil, err
 	}
 
+	var failureReturn = func(err error) (*os.File, error) {
+		f.Close()
+		os.Remove(filePath)
+		return nil, err
+	}
+
 	// Expand file to actual size
 	if err = expandMapFile(f, typ, bl); err != nil {
-		return nil, err
+		return failureReturn(err)
 	}
 
 	var (
@@ -146,8 +152,7 @@ func createMapFile(filePath string, typ MapType, bl int, pubKey *pocec.PublicKey
 	copy(fileHeaderBytes[PosPubKey:], pubKeyBytes)
 
 	if _, err = f.WriteAt(fileHeaderBytes[:], 0); err != nil {
-		f.Close()
-		return nil, err
+		return failureReturn(err)
 	}
 
 	return f, nil
@@ -166,13 +171,14 @@ func openMapFile(filePath string) (*os.File, error) {
 }
 
 func loadHashMap(filePath string) (*HashMap, MapType, error) {
-	var failureReturn = func(err error) (*HashMap, MapType, error) {
+	f, err := openMapFile(filePath)
+	if nil != err {
 		return nil, 0, err
 	}
 
-	f, err := openMapFile(filePath)
-	if nil != err {
-		return failureReturn(err)
+	var failureReturn = func(err error) (*HashMap, MapType, error) {
+		f.Close()
+		return nil, 0, err
 	}
 
 	// read meta info
