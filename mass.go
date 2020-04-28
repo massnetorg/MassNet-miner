@@ -19,7 +19,6 @@ import (
 	"massnet.org/mass/limits"
 	"massnet.org/mass/logging"
 	"massnet.org/mass/massutil"
-	_ "massnet.org/mass/poc/engine/pocminer/miner"
 	_ "massnet.org/mass/poc/wallet/db/ldb"
 	"massnet.org/mass/version"
 )

@@ -5,6 +5,7 @@ import (
 
 	"massnet.org/mass/logging"
 	"massnet.org/mass/poc/engine"
+	_ "massnet.org/mass/poc/engine/pocminer/miner"
 	"massnet.org/mass/poc/engine/spacekeeper"
 	"massnet.org/mass/poc/engine/spacekeeper/capacity"
 )
@@ -50,7 +51,6 @@ func (csk *ConfigurableSpaceKeeper) ConfigureBySize(targetSize int, password str
 	}
 	return sk.ConfigureBySize(targetSize, password)
 }
-
 
 func (csk *ConfigurableSpaceKeeper) AvailableDiskSize() (uint64, error) {
 	sk, err := getInstance(csk.SpaceKeeper)

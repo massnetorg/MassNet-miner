@@ -83,12 +83,24 @@ func (m *PoCMiner) syncGetBestProof(pocTemplate *blockchain.PoCTemplate, quit ch
 	// cancel stale monitor
 	defer cancelMonitor()
 
-	var printed bool
 	var bestProofIndex int
 	var bestQuality = big.NewInt(0)
 	var challenge = pocutil.Hash(pocTemplate.Challenge)
 	ticker := time.NewTicker(time.Second * pocSlot / 4)
 	defer ticker.Stop()
+
+	queryStart := time.Now()
+	skProofs, err := m.SpaceKeeper.GetProofs(context.TODO(), engine.SFMining, challenge)
+	if err != nil {
+		return nil, err
+	}
+	queryElapsed := time.Since(queryStart)
+	proofs := getValidProofs(skProofs)
+	logging.CPrint(logging.INFO, "find proofs for next block, waiting for proper slot",
+		logging.LogFormat{"height": pocTemplate.Height, "valid_count": len(proofs), "total_count": len(skProofs), "query_time": queryElapsed.Seconds()})
+	if len(proofs) == 0 {
+		return nil, errNoValidProof
+	}
 
 try:
 	for {
@@ -97,16 +109,6 @@ try:
 			return nil, errQuitSolveBlock
 		case <-ticker.C:
 			logging.CPrint(logging.DEBUG, "ticker received")
-
-			skProofs, err := m.SpaceKeeper.GetProofs(context.TODO(), engine.SFMining, challenge)
-			if err != nil {
-				return nil, err
-			}
-			proofs := getValidProofs(skProofs)
-			if !printed {
-				logging.CPrint(logging.INFO, "find proof for next block, waiting for proper slot", logging.LogFormat{"height": pocTemplate.Height, "valid_count": len(proofs), "total_count": len(skProofs)})
-				printed = true
-			}
 
 			nowSlot := uint64(time.Now().Unix()) / pocSlot
 			if workSlot > nowSlot+allowAhead {

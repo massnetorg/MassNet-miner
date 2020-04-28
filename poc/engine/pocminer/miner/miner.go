@@ -232,9 +232,18 @@ func (m *PoCMiner) solveBlock(payoutAddress massutil.Address, quit chan struct{}
 	}
 
 	// Step 4: get best proof
-	logging.CPrint(logging.INFO, "Step 4: get best proof")
+	logging.CPrint(logging.INFO, "Step 4: get best proof", logging.LogFormat{
+		"height":    pocTemplate.Height,
+		"previous":  pocTemplate.Previous,
+		"timestamp": pocTemplate.Timestamp.Unix(),
+		"challenge": pocTemplate.Challenge,
+	})
 	tProof, err := m.getBestProof(pocTemplate, quit)
 	if err != nil {
+		if err == errNoValidProof {
+			time.Sleep(time.Second * pocSlot)
+			logging.CPrint(logging.INFO, "sleep mining for 3 sec to wait for valid poofs", logging.LogFormat{"height": pocTemplate.Height})
+		}
 		return failure(err)
 	}
 
