@@ -77,6 +77,7 @@ var (
 	ErrInvalidFrozenPeriod   = errors.New("invalid frozen period")
 	ErrStakingRewardNum      = errors.New("incorrect staking reward number")
 	ErrBindingPubKey         = errors.New("binding pubkey does not match miner pubkey")
+	ErrBindingInputMissing   = errors.New("input of binding missing")
 
 	// TxIn
 	ErrFindReferenceInput = errors.New("unable find reference transaction ")

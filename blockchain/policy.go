@@ -235,6 +235,10 @@ func checkPkScriptStandard(txOut *wire.TxOut, msgTx *wire.MsgTx,
 					txInHash := txIn.PreviousOutPoint.Hash
 					txInIndex := txIn.PreviousOutPoint.Index
 
+					if txStore[txInHash].Tx == nil {
+						return txOutClass, ErrBindingInputMissing
+					}
+
 					// txStore has been checked, so do not perform that check again
 					originTx := txStore[txInHash].Tx.MsgTx()
 					prePKScript := originTx.TxOut[txInIndex].PkScript

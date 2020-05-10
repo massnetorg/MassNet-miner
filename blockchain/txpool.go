@@ -580,6 +580,19 @@ func (tp *TxPool) maybeAcceptTransaction(tx *massutil.Tx, isNew, rateLimit bool)
 	if !config.ChainParams.RelayNonStdTxs {
 		err = checkTransactionStandard(tx, nextBlockHeight, massutil.MinRelayTxFee(), txStore)
 		if err != nil {
+			if err == ErrBindingInputMissing {
+				var missingParents []*wire.Hash
+				for _, txD := range txStore {
+					if txD.Err == database.ErrTxShaMissing {
+						missingParents = append(missingParents, txD.Hash)
+					}
+				}
+				if len(missingParents) > 0 {
+					return missingParents, nil
+				}
+				logging.CPrint(logging.ERROR, "unexpected ErrBindingInputMissing",
+					logging.LogFormat{"txHash": txHash, "err": err})
+			}
 			// Attempt to extract a reject code from the error so
 			// it can be retained.  When not possible, fall back to
 			// a non standard error.
