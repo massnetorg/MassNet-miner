@@ -62,7 +62,12 @@ func (s *Server) ConfigureCapacity(ctx context.Context, in *pb.ConfigureSpaceKee
 			logging.LogFormat{"allowed": config.MaxMiningPayoutAddresses, "count": len(payoutAddresses)})
 		return nil, status.New(ErrAPIMinerNoAddress, ErrCode[ErrAPIMinerNoAddress]).Err()
 	}
-	_, err = s.spaceKeeper.ConfigureBySize(int(diskSize), in.Passphrase)
+	if err := s.pocWallet.Unlock([]byte(in.Passphrase)); err != nil {
+		logging.CPrint(logging.ERROR, "fail to unlock poc wallet",
+			logging.LogFormat{"err": err})
+		return nil, status.New(ErrAPIMinerWrongPassphrase, ErrCode[ErrAPIMinerWrongPassphrase]).Err()
+	}
+	_, err = s.spaceKeeper.ConfigureBySize(diskSize, false, false)
 	if err != nil {
 		logging.CPrint(logging.ERROR, "fail to configure spaceKeeper", logging.LogFormat{"err": err})
 		return nil, status.New(ErrAPIMinerInternal, err.Error()).Err()

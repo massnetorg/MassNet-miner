@@ -11,10 +11,11 @@ import (
 )
 
 type WorkSpace struct {
-	id    *SpaceID
-	db    massdb.MassDB
-	state engine.WorkSpaceState
-	using bool
+	id      *SpaceID
+	db      massdb.MassDB
+	state   engine.WorkSpaceState
+	using   bool
+	rootDir string
 }
 
 // NewWorkSpace loads MassDB from given rootDir with PubKey&BitLength,
@@ -39,9 +40,10 @@ func NewWorkSpace(dbType string, rootDir string, ordinal int64, pubKey *pocec.Pu
 	}
 
 	ws := &WorkSpace{
-		db:    mdb,
-		state: engine.Registered,
-		id:    NewSpaceID(ordinal, mdb.PubKey(), mdb.BitLength()),
+		db:      mdb,
+		state:   engine.Registered,
+		id:      NewSpaceID(ordinal, mdb.PubKey(), mdb.BitLength()),
+		rootDir: rootDir,
 	}
 
 	if _, plotted, _ := mdb.Progress(); plotted {

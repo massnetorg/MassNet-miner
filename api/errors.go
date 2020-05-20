@@ -65,6 +65,7 @@ const (
 	ErrAPIMinerInvalidCapacity = 1807
 	ErrAPIMinerInvalidSpaceID  = 1808
 	ErrAPIMinerNoAddress       = 1809
+	ErrAPIMinerWrongPassphrase = 1810
 
 	// Wallet err
 	ErrAPIExportWallet   = 1901
@@ -128,6 +129,7 @@ var ErrCode = map[uint32]string{
 	ErrAPIInvalidPassphrase:    "Invalid passphrase",
 	ErrAPIInvalidSpaceID:       "Invalid space id",
 	ErrAPIMinerNoAddress:       "Missing miner payout addresses",
+	ErrAPIMinerWrongPassphrase: "Wrong miner passphrase",
 
 	// Wallet err
 	ErrAPIExportWallet:   "Failed to export wallet",

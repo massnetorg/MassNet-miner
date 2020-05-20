@@ -600,6 +600,7 @@ func (sk *SpaceKeeper) getProofs(wsMap map[string]*WorkSpace, challenge pocutil.
 	return result
 }
 
+// useWorkSpace is not thread safe, should use lock in upper functions
 func (sk *SpaceKeeper) useWorkSpace(ws *WorkSpace) {
 	for _, e := range sk.workSpaceList {
 		if e.id.String() == ws.id.String() {
@@ -610,6 +611,7 @@ func (sk *SpaceKeeper) useWorkSpace(ws *WorkSpace) {
 	ws.using = true
 }
 
+// disuseWorkSpace is not thread safe, should use lock in upper functions
 func (sk *SpaceKeeper) disuseWorkSpace(ws *WorkSpace) {
 	ws.using = false
 	sk.workSpaceList = deleteFromSlice(sk.workSpaceList, ws.id.String())
@@ -637,9 +639,45 @@ func (sk *SpaceKeeper) generateNewWorkSpace(bitLength int) (*WorkSpace, error) {
 	return NewWorkSpace(sk.dbType, sk.dbDirs[0], int64(ordinal), pubKey, bitLength)
 }
 
+// resetWorkSpaceList is not thread safe, should use lock in upper functions
+func (sk *SpaceKeeper) applyConfiguredWorkSpaces(wsList []*WorkSpace, execPlot, execMine bool) ([]engine.WorkSpaceInfo, error) {
+	if len(wsList) == 0 {
+		return nil, ErrSpaceKeeperConfiguredNothing
+	}
+	// disuse current workSpaces & reset workSpaceList
+	for _, ws := range sk.workSpaceList {
+		ws.using = false
+	}
+	sk.workSpaceList = make([]*WorkSpace, 0)
+	// push workSpaces to queue (for spacePlotter)
+	sk.queue.Reset()
+	tmpQueuedList := newPlotterQueue()
+	for _, ws := range wsList {
+		qws := newQueuedWorkSpace(ws, execMine)
+		tmpQueuedList.Push(qws, qws.priority())
+	}
+	for !tmpQueuedList.Empty() {
+		qws := tmpQueuedList.PopItem()
+		sk.queue.Push(qws, qws.priority())
+		sk.useWorkSpace(qws.ws)
+	}
+	if !(execMine || execPlot) {
+		sk.queue.Reset()
+	}
+	// collect workSpaceInfos
+	wsiList := make([]engine.WorkSpaceInfo, len(wsList))
+	for i, ws := range wsList {
+		wsiList[i] = ws.Info()
+	}
+	return wsiList, nil
+}
+
 func (sk *SpaceKeeper) ConfigureByBitLength(BlCount map[int]int, execPlot, execMine bool) ([]engine.WorkSpaceInfo, error) {
 	if sk.Started() {
 		return nil, ErrSpaceKeeperIsRunning
+	}
+	if sk.wallet.IsLocked() {
+		return nil, ErrWalletIsLocked
 	}
 	if !atomic.CompareAndSwapInt32(&sk.configuring, 0, 1) {
 		return nil, ErrSpaceKeeperIsConfiguring
@@ -648,6 +686,11 @@ func (sk *SpaceKeeper) ConfigureByBitLength(BlCount map[int]int, execPlot, execM
 	atomic.StoreInt32(&sk.configured, 0)
 
 	var failureReturn = func(err error) ([]engine.WorkSpaceInfo, error) {
+		logging.CPrint(logging.ERROR, "fail on ConfigureByBitLength", logging.LogFormat{
+			"bl_count":  BlCount,
+			"exec_plot": execPlot,
+			"exec_mine": execMine,
+		})
 		return nil, err
 	}
 
@@ -656,33 +699,10 @@ func (sk *SpaceKeeper) ConfigureByBitLength(BlCount map[int]int, execPlot, execM
 	var resultList = make([]*WorkSpace, 0)
 
 	var successfullyReturn = func() ([]engine.WorkSpaceInfo, error) {
-		if len(resultList) == 0 {
-			logging.CPrint(logging.ERROR, "configured nothing by bitLength", logging.LogFormat{"target": BlCount, "result": resultList})
-			return failureReturn(ErrSpaceKeeperConfiguredNothing)
+		wsiList, err := sk.applyConfiguredWorkSpaces(resultList, execPlot, execMine)
+		if err != nil {
+			return failureReturn(err)
 		}
-		// Push workSpaces into queue (for spacePlotter)
-		for _, ws := range sk.workSpaceList {
-			ws.using = false
-		}
-		sk.workSpaceList = make([]*WorkSpace, 0)
-		tmpQueuedList := newPlotterQueue()
-		for _, ws := range resultList {
-			qws := newQueuedWorkSpace(ws, execMine)
-			tmpQueuedList.Push(qws, qws.priority())
-		}
-		for !tmpQueuedList.Empty() {
-			qws := tmpQueuedList.PopItem()
-			sk.queue.Push(qws, qws.priority())
-			sk.useWorkSpace(qws.ws)
-		}
-		if !(execMine || execPlot) {
-			sk.queue.Reset()
-		}
-		wsiList := make([]engine.WorkSpaceInfo, len(resultList))
-		for i, ws := range resultList {
-			wsiList[i] = ws.Info()
-		}
-
 		atomic.StoreInt32(&sk.configured, 1)
 		return wsiList, nil
 	}
@@ -765,9 +785,12 @@ func (sk *SpaceKeeper) generateFillSpaceListByBitLength(dstList []*WorkSpace, cu
 	return dstList, nil
 }
 
-func (sk *SpaceKeeper) ConfigureBySize(targetSize int, password string) ([]engine.WorkSpaceInfo, error) {
+func (sk *SpaceKeeper) ConfigureBySize(targetSize uint64, execPlot, execMine bool) ([]engine.WorkSpaceInfo, error) {
 	if sk.Started() {
 		return nil, ErrSpaceKeeperIsRunning
+	}
+	if sk.wallet.IsLocked() {
+		return nil, ErrWalletIsLocked
 	}
 	if !atomic.CompareAndSwapInt32(&sk.configuring, 0, 1) {
 		return nil, ErrSpaceKeeperIsConfiguring
@@ -776,15 +799,14 @@ func (sk *SpaceKeeper) ConfigureBySize(targetSize int, password string) ([]engin
 	atomic.StoreInt32(&sk.configured, 0)
 
 	var failureReturn = func(err error) ([]engine.WorkSpaceInfo, error) {
+		logging.CPrint(logging.ERROR, "fail on ConfigureBySize", logging.LogFormat{
+			"target_size": targetSize,
+		})
 		return nil, err
 	}
 
-	if targetSize < poc.BitLengthDiskSize[usableBitLength()[0]] {
+	if targetSize < uint64(poc.BitLengthDiskSize[usableBitLength()[0]]) {
 		return failureReturn(ErrConfigUnderSizeTarget)
-	}
-
-	if err := sk.wallet.Unlock([]byte(password)); err != nil {
-		return nil, err
 	}
 
 	var currentSize = 0
@@ -792,46 +814,23 @@ func (sk *SpaceKeeper) ConfigureBySize(targetSize int, password string) ([]engin
 	var resultList = make([]*WorkSpace, 0)
 
 	var successfullyReturn = func() ([]engine.WorkSpaceInfo, error) {
-		if len(resultList) == 0 {
-			logging.CPrint(logging.ERROR, "configured nothing by size", logging.LogFormat{"target": targetSize, "result": resultList})
-			return failureReturn(ErrSpaceKeeperConfiguredNothing)
+		wsiList, err := sk.applyConfiguredWorkSpaces(resultList, execPlot, execMine)
+		if err != nil {
+			return failureReturn(err)
 		}
-
-		// Push workSpaces into queue (for spacePlotter)
-		sk.queue.Reset()
-		for _, ws := range sk.workSpaceList {
-			ws.using = false
-		}
-		sk.workSpaceList = make([]*WorkSpace, 0)
-		tmpQueuedList := newPlotterQueue()
-		for _, ws := range resultList {
-			qws := newQueuedWorkSpace(ws, false)
-			tmpQueuedList.Push(qws, qws.priority())
-		}
-		for !tmpQueuedList.Empty() {
-			qws := tmpQueuedList.PopItem()
-			sk.queue.Push(qws, qws.priority())
-			sk.useWorkSpace(qws.ws)
-		}
-		sk.queue.Reset()
-		wsiList := make([]engine.WorkSpaceInfo, len(resultList))
-		for i, ws := range resultList {
-			wsiList[i] = ws.Info()
-		}
-
 		atomic.StoreInt32(&sk.configured, 1)
 		return wsiList, nil
 	}
 
 	// try to fill list by indexed spaces
-	resultList, currentSize, finished = fillSpaceListBySize(resultList, sk.getIndexedWorkSpaces(), currentSize, targetSize)
+	resultList, currentSize, finished = fillSpaceListBySize(resultList, sk.getIndexedWorkSpaces(), currentSize, int(targetSize))
 	if finished {
 		return successfullyReturn()
 	}
 
 	// try to generate new WorkSpace to fill list
 	var err error
-	resultList, _, err = sk.generateFillSpaceListBySize(resultList, currentSize, targetSize)
+	resultList, _, err = sk.generateFillSpaceListBySize(resultList, currentSize, int(targetSize))
 	if err != nil {
 		return failureReturn(err)
 	}
@@ -909,6 +908,9 @@ func (sk *SpaceKeeper) ConfigureByPubKey(PubKeyBL map[*pocec.PublicKey]int, PubK
 	if sk.Started() {
 		return nil, ErrSpaceKeeperIsRunning
 	}
+	if sk.wallet.IsLocked() {
+		return nil, ErrWalletIsLocked
+	}
 	if !atomic.CompareAndSwapInt32(&sk.configuring, 0, 1) {
 		return nil, ErrSpaceKeeperIsConfiguring
 	}
@@ -916,34 +918,21 @@ func (sk *SpaceKeeper) ConfigureByPubKey(PubKeyBL map[*pocec.PublicKey]int, PubK
 	atomic.StoreInt32(&sk.configured, 0)
 
 	var failureReturn = func(err error) ([]engine.WorkSpaceInfo, error) {
+		logging.CPrint(logging.ERROR, "fail on ConfigureByPubKey", logging.LogFormat{
+			"exec_plot": execPlot,
+			"exec_mine": execMine,
+		})
 		return nil, err
 	}
 	var resultList = make([]*WorkSpace, 0)
 	var successfullyReturn = func() ([]engine.WorkSpaceInfo, error) {
 		if len(resultList) != len(PubKeyBL) {
-			logging.CPrint(logging.ERROR, "configured not enough by pubKey", logging.LogFormat{"target": PubKeyBL, "result": resultList})
 			return failureReturn(ErrSpaceKeeperConfiguredNothing)
 		}
-		// Push workSpaces into queue (for spacePlotter)
-		sk.workSpaceList = make([]*WorkSpace, 0)
-		tmpQueuedList := newPlotterQueue()
-		for _, ws := range resultList {
-			qws := newQueuedWorkSpace(ws, execMine)
-			tmpQueuedList.Push(qws, qws.priority())
+		wsiList, err := sk.applyConfiguredWorkSpaces(resultList, execPlot, execMine)
+		if err != nil {
+			return failureReturn(err)
 		}
-		for !tmpQueuedList.Empty() {
-			qws := tmpQueuedList.PopItem()
-			sk.queue.Push(qws, qws.priority())
-			sk.useWorkSpace(qws.ws)
-		}
-		if !(execMine || execPlot) {
-			sk.queue.Reset()
-		}
-		wsiList := make([]engine.WorkSpaceInfo, len(resultList))
-		for i, ws := range resultList {
-			wsiList[i] = ws.Info()
-		}
-
 		atomic.StoreInt32(&sk.configured, 1)
 		return wsiList, nil
 	}
@@ -993,43 +982,33 @@ func (sk *SpaceKeeper) ConfigureByFlags(flags engine.WorkSpaceStateFlags, execPl
 	if sk.Started() {
 		return nil, ErrSpaceKeeperIsRunning
 	}
+	if sk.wallet.IsLocked() {
+		return nil, ErrWalletIsLocked
+	}
 	if !atomic.CompareAndSwapInt32(&sk.configuring, 0, 1) {
 		return nil, ErrSpaceKeeperIsConfiguring
 	}
 	defer atomic.StoreInt32(&sk.configuring, 0)
 	atomic.StoreInt32(&sk.configured, 0)
 
-	items := make([]*WorkSpace, 0)
+	resultList := make([]*WorkSpace, 0)
 	for _, state := range flags.States() {
 		m := sk.workSpaceIndex[state].Items()
 		for _, ws := range m {
-			items = append(items, ws)
+			resultList = append(resultList, ws)
 		}
 	}
 
-	sk.workSpaceList = make([]*WorkSpace, 0)
-	tmpQueuedList := newPlotterQueue()
-	for _, ws := range items {
-		qws := newQueuedWorkSpace(ws, true)
-		tmpQueuedList.Push(qws, qws.priority())
+	wsiList, err := sk.applyConfiguredWorkSpaces(resultList, execPlot, execMine)
+	if err != nil {
+		logging.CPrint(logging.ERROR, "fail on ConfigureByFlags", logging.LogFormat{
+			"flags":     flags,
+			"exec_plot": execPlot,
+			"exec_mine": execMine,
+		})
+		return nil, err
 	}
-	for !tmpQueuedList.Empty() {
-		qws := tmpQueuedList.PopItem()
-		sk.queue.Push(qws, qws.priority())
-		sk.useWorkSpace(qws.ws)
-	}
-	if !(execMine || execPlot) {
-		sk.queue.Reset()
-	}
-	wsiList := make([]engine.WorkSpaceInfo, len(sk.workSpaceList))
-	for i, ws := range sk.workSpaceList {
-		wsiList[i] = ws.Info()
-	}
-
-	if len(wsiList) == 0 {
-		atomic.StoreInt32(&sk.configured, 1)
-	}
-
+	atomic.StoreInt32(&sk.configured, 1)
 	return wsiList, nil
 }
 
