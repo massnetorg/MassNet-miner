@@ -5,7 +5,6 @@ import (
 	"errors"
 
 	"golang.org/x/crypto/ripemd160"
-
 	"massnet.org/mass/config"
 	"massnet.org/mass/massutil"
 	"massnet.org/mass/pocec"
@@ -42,6 +41,7 @@ type Db interface {
 	// RollbackClose discards the recent database changes to the previously
 	// saved data at last Sync and closes the database.
 	RollbackClose() (err error)
+	Rollback()
 
 	// Sync verifies that the database is coherent on disk and no
 	// outstanding transactions are in flight.

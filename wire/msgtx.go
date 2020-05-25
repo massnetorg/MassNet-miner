@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"errors"
 	"io"
+	"io/ioutil"
 	"math"
 	"strconv"
 
@@ -464,4 +465,55 @@ func IsValidFrozenPeriod(height uint64) bool {
 
 func IsValidStakingValue(value int64) bool {
 	return value >= int64(consensus.MinStakingValue)
+}
+
+func SerializeBlockWithModeDB(blk *MsgBlock) (raw []byte, txlocs []TxLoc, err error) {
+	raw, err = blk.Bytes(DB)
+	if err != nil {
+		return
+	}
+	r := bytes.NewBuffer(raw)
+
+	fullLen := r.Len()
+
+	// Read BLockBase length
+	blockBaseLength, _, err := ReadUint64(r, 0)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	// Read blockBase
+	baseData := make([]byte, blockBaseLength)
+	if n, err := r.Read(baseData); uint64(n) != blockBaseLength || err != nil {
+		return nil, nil, err
+	}
+
+	// Read txCount
+	txCount, _, err := ReadUint64(r, 0)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	// Prevent more transactions than could possibly fit into a block.
+	if txCount > MaxTxPerBlock {
+		return nil, nil, errTooManyTxsInBlock
+	}
+
+	txLocs := make([]TxLoc, txCount)
+	for i := uint64(0); i < txCount; i++ {
+		// Read tx length
+		txLen, _, err := ReadUint64(r, 0)
+		if err != nil {
+			return nil, nil, err
+		}
+		// Set txLoc
+		txLocs[i].TxStart = fullLen - r.Len()
+		txLocs[i].TxLen = int(txLen)
+		_, err = io.CopyN(ioutil.Discard, r, int64(txLen))
+		if err != nil {
+			return nil, nil, err
+		}
+	}
+
+	return raw, txLocs, nil
 }

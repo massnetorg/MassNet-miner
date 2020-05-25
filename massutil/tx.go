@@ -7,22 +7,51 @@ import (
 	"massnet.org/mass/wire"
 )
 
+// Registered by txscript
+var WitPkScriptParseFunc func(script []byte) (class byte, frozen uint64, scriptHash [32]byte)
+
 // TxIndexUnknown is the value returned for a transaction index that is unknown.
 // This is typically because the transaction has not been inserted into a block
 // yet.
 const TxIndexUnknown = -1
+
+type PkScriptInfo struct {
+	Class        byte // txscript.ScriptClass
+	ScriptHash   [32]byte
+	FrozenPeriod uint64
+}
 
 type Tx struct {
 	msgTx         *wire.MsgTx // Underlying MsgTx
 	txHash        *wire.Hash  // Cached transaction hash
 	txHashWitness *wire.Hash  // Cached transaction witness hash
 	txIndex       int         // Position within a block or TxIndexUnknown
+
+	pkscriptInfos map[int]*PkScriptInfo
 }
 
 // MsgTx returns the underlying wire.MsgTx for the transaction.
 func (t *Tx) MsgTx() *wire.MsgTx {
 	// Return the cached transaction.
 	return t.msgTx
+}
+
+func (t *Tx) TxOut() []*wire.TxOut {
+	return t.MsgTx().TxOut
+}
+
+func (t *Tx) GetPkScriptInfo(i int) *PkScriptInfo {
+	psi, ok := t.pkscriptInfos[i]
+	if !ok {
+		class, frozen, sh := WitPkScriptParseFunc(t.MsgTx().TxOut[i].PkScript)
+		psi = &PkScriptInfo{
+			Class:        class,
+			ScriptHash:   sh,
+			FrozenPeriod: frozen,
+		}
+		t.pkscriptInfos[i] = psi
+	}
+	return psi
 }
 
 func (t *Tx) Hash() *wire.Hash {
@@ -77,8 +106,9 @@ func (t *Tx) SetIndex(index int) {
 // wire.MsgTx.  See Tx.
 func NewTx(msgTx *wire.MsgTx) *Tx {
 	return &Tx{
-		msgTx:   msgTx,
-		txIndex: TxIndexUnknown,
+		msgTx:         msgTx,
+		txIndex:       TxIndexUnknown,
+		pkscriptInfos: make(map[int]*PkScriptInfo),
 	}
 }
 
@@ -99,9 +129,5 @@ func NewTxFromReader(r io.Reader, mode wire.CodecMode) (*Tx, error) {
 		return nil, err
 	}
 
-	t := Tx{
-		msgTx:   &msgTx,
-		txIndex: TxIndexUnknown,
-	}
-	return &t, nil
+	return NewTx(&msgTx), nil
 }

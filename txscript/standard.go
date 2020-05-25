@@ -15,6 +15,22 @@ import (
 	"massnet.org/mass/wire"
 )
 
+func init() {
+	massutil.WitPkScriptParseFunc = func(pkScript []byte) (class byte, frozen uint64, witHash [32]byte) {
+		clazz, pops := GetScriptInfo(pkScript)
+		if clazz == WitnessV0ScriptHashTy ||
+			clazz == StakingScriptHashTy ||
+			clazz == BindingScriptHashTy {
+			var err error
+			frozen, witHash, err = GetParsedOpcode(pops, clazz)
+			if err != nil {
+				clazz = NonStandardTy
+			}
+		}
+		return byte(clazz), frozen, witHash
+	}
+}
+
 // String implements the Stringer interface by returning the name of
 // the enum script class. If the enum is invalid then "Invalid" will be
 // returned.

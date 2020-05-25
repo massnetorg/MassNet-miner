@@ -5,6 +5,7 @@
 package txscript
 
 import (
+	"encoding/binary"
 	"sync"
 
 	"massnet.org/mass/wire"
@@ -18,16 +19,21 @@ type TxSigHashes struct {
 	HashPrevOuts wire.Hash
 	HashSequence wire.Hash
 	HashOutputs  wire.Hash
+	TxVersion    [4]byte
+	TxLockTime   [8]byte
 }
 
 // NewTxSigHashes computes, and returns the cached sighashes of the given
 // transaction.
 func NewTxSigHashes(tx *wire.MsgTx) *TxSigHashes {
-	return &TxSigHashes{
+	ret := &TxSigHashes{
 		HashPrevOuts: calcHashPrevOuts(tx),
 		HashSequence: calcHashSequence(tx),
 		HashOutputs:  calcHashOutputs(tx),
 	}
+	binary.LittleEndian.PutUint32(ret.TxVersion[:], tx.Version)
+	binary.LittleEndian.PutUint64(ret.TxLockTime[:], tx.LockTime)
+	return ret
 }
 
 // HashCache houses a set of partial sighashes keyed by txid. The set of partial

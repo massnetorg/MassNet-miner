@@ -96,6 +96,18 @@ func (db *ChainDb) preSubmit(index int) error {
 	return nil
 }
 
+func (db *ChainDb) Rollback() {
+	db.blkFileKeeper.DiscardRecentChange()
+}
+
+// RollbackClose this is part of the database.Db interface and should discard
+// recent changes to the db and the close the db.  This currently just does
+// a clean shutdown.
+func (db *ChainDb) RollbackClose() error {
+	db.Rollback()
+	return db.close()
+}
+
 func (db *ChainDb) Commit(hash wire.Hash) error {
 	db.dbLock.Lock()
 	defer db.dbLock.Unlock()
@@ -123,6 +135,8 @@ func (db *ChainDb) Commit(hash wire.Hash) error {
 	if err != nil {
 		return err
 	}
+
+	db.blkFileKeeper.CommitRecentChange()
 
 	return nil
 }

@@ -56,7 +56,7 @@ func newLevelDB(path string, create bool) (store storage.Storage, err error) {
 
 	ldb, err = leveldb.OpenFile(path, opts)
 	if err != nil {
-		logging.CPrint(logging.ERROR, "init leveldb error", logging.LogFormat{
+		logging.CPrint(logging.WARN, "init leveldb error", logging.LogFormat{
 			"path":   path,
 			"create": create,
 			"err":    err,
@@ -64,7 +64,7 @@ func newLevelDB(path string, create bool) (store storage.Storage, err error) {
 		return nil, err
 	}
 
-	logging.CPrint(logging.INFO, "init leveldb", logging.LogFormat{
+	logging.CPrint(logging.INFO, "init chain leveldb", logging.LogFormat{
 		"path":   path,
 		"create": create,
 	})

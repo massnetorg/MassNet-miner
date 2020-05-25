@@ -7,7 +7,6 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
-	"massnet.org/mass/database"
 	"massnet.org/mass/database/storage"
 	_ "massnet.org/mass/database/storage/ldbstorage"
 )
@@ -546,49 +545,59 @@ func testOverwrite(t *testing.T) {
 	assert.Equal(t, newValue, v)
 }
 
-func TestCheckVersion(t *testing.T) {
-	dbdir := "testDb"
-	dbtype := "testdb"
-
+func TestCheckCompatibility(t *testing.T) {
 	tests := []struct {
-		name   string
-		dbtype string
-		dbpath string
-		err    error
+		name      string
+		dbVersion int32
+		dbPath    string
+		dbType    string
+		checkType string
+		err       error
 	}{
 		{
-			"normal",
-			dbtype,
-			dbdir,
+			"compatible",
+			storage.CurrentStorageVersion,
+			"testDb",
+			"leveldb",
+			"leveldb",
 			nil,
 		},
 		{
-			"incorrect dbpath",
-			dbtype,
-			"wrongpath",
-			database.ErrDbDoesNotExist,
+			"incompatible version 1",
+			storage.CurrentStorageVersion + 1,
+			"testDb",
+			"leveldb",
+			"leveldb",
+			storage.ErrIncompatibleStorage,
 		},
 		{
-			"incorrect dbtype",
-			"wrongtype",
-			dbdir,
-			storage.ErrUnsupportedVersion,
+			"incompatible version 2",
+			storage.CurrentStorageVersion - 1,
+			"testDb",
+			"leveldb",
+			"leveldb",
+			storage.ErrIncompatibleStorage,
+		},
+		{
+			"incompatible dbtype",
+			storage.CurrentStorageVersion,
+			"testDb",
+			"leveldb",
+			"mysql",
+			storage.ErrIncompatibleStorage,
 		},
 	}
 
-	err := os.MkdirAll(dbdir, 0700)
-	assert.Nil(t, err)
-	defer func() {
-		err = os.RemoveAll(dbdir)
-		assert.Nil(t, err)
-	}()
-	// create
-	err = storage.CheckVersion(dbtype, dbdir, true)
-	assert.Nil(t, err)
-
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			err = storage.CheckVersion(test.dbtype, test.dbpath, false)
+			os.MkdirAll(test.dbPath, 0700)
+			defer func() {
+				os.RemoveAll(test.dbPath)
+			}()
+			err := storage.WriteVersion(filepath.Join(test.dbPath, ".ver"), test.dbType, test.dbVersion)
+			assert.Nil(t, err)
+
+			err = storage.CheckCompatibility(test.checkType, test.dbPath)
 			assert.Equal(t, test.err, err)
 		})
 	}

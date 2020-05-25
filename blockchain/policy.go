@@ -204,6 +204,57 @@ func checkInputsStandard(tx *massutil.Tx, txStore TxStore) error {
 	return nil
 }
 
+func checkParsePkScript(tx *massutil.Tx, txStore TxStore) (err error) {
+	checkedBinding := false
+	for i, txOut := range tx.TxOut() {
+		psi := tx.GetPkScriptInfo(i)
+		txOutClass := txscript.ScriptClass(psi.Class)
+
+		switch txOutClass {
+		case txscript.StakingScriptHashTy:
+			if !wire.IsValidStakingValue(txOut.Value) {
+				logging.CPrint(logging.ERROR, "lock value is invalid", logging.LogFormat{"value": txOut.Value})
+				return ErrInvalidStakingTxValue
+			}
+			if !wire.IsValidFrozenPeriod(psi.FrozenPeriod) {
+				logging.CPrint(logging.ERROR, "lock frozen period is invalid", logging.LogFormat{"frozen_period": psi.FrozenPeriod})
+				return ErrInvalidFrozenPeriod
+			}
+
+		case txscript.BindingScriptHashTy:
+			if !checkedBinding {
+				if !IsCoinBaseTx(tx.MsgTx()) {
+					for j, txIn := range tx.MsgTx().TxIn {
+						txInHash := txIn.PreviousOutPoint.Hash
+						txInIndex := txIn.PreviousOutPoint.Index
+
+						if txStore[txInHash].Tx == nil {
+							return ErrBindingInputMissing
+						}
+						// txStore has been checked, so do not perform that check again
+						originTx := txStore[txInHash].Tx.MsgTx()
+						prePKScript := originTx.TxOut[txInIndex].PkScript
+						txInClass := txscript.GetScriptClass(prePKScript)
+						if txInClass == txscript.BindingScriptHashTy {
+							// cache[txscript.BindingScriptHashTy] = true
+							logging.CPrint(logging.ERROR, "input and output of tx are all binding tx",
+								logging.LogFormat{"txInIndex": j})
+							return ErrStandardBindingTx
+						}
+					}
+				}
+				checkedBinding = true
+			}
+		case txscript.NonStandardTy,
+			txscript.MultiSigTy:
+			logging.CPrint(logging.ERROR, "non-standard script form",
+				logging.LogFormat{"script type": txOutClass})
+			return ErrNonStandardType
+		}
+	}
+	return nil
+}
+
 // checkPkScriptStandard performs a series of checks on a transaction ouput
 // script (public key script) to ensure it is a "standard" public key script.
 // A standard public key script is one that is a recognized form, and for
@@ -238,7 +289,6 @@ func checkPkScriptStandard(txOut *wire.TxOut, msgTx *wire.MsgTx,
 					if txStore[txInHash].Tx == nil {
 						return txOutClass, ErrBindingInputMissing
 					}
-
 					// txStore has been checked, so do not perform that check again
 					originTx := txStore[txInHash].Tx.MsgTx()
 					prePKScript := originTx.TxOut[txInIndex].PkScript
@@ -388,25 +438,33 @@ func checkTransactionStandard(tx *massutil.Tx, height uint64, minRelayTxFee mass
 		}
 	}
 
+	err := checkParsePkScript(tx, txStore)
+	if err != nil {
+		// Attempt to extract a reject code from the error so
+		// it can be retained.  When not possible, fall back to
+		// a non standard error.
+		logging.CPrint(logging.ERROR, "checkParsePkScript error", logging.LogFormat{"tx": tx.Hash(), "err": err})
+		return err
+	}
 	// None of the output public key scripts can be a non-standard script or
 	// be "dust" (except when the script is a null data script).
 	numNullDataOutputs := 0
-	containsBindingTxIn := make(map[txscript.ScriptClass]bool)
-	for i, txOut := range msgTx.TxOut {
-		scriptClass, err := checkPkScriptStandard(txOut, msgTx, containsBindingTxIn, txStore)
-		if err != nil {
-			// Attempt to extract a reject code from the error so
-			// it can be retained.  When not possible, fall back to
-			// a non standard error.
-			logging.CPrint(logging.ERROR, "checkPkScriptStandard error",
-				logging.LogFormat{"index": i, "err": err})
-			return err
-		}
+	// containsBindingTxIn := make(map[txscript.ScriptClass]bool)
+	for i, txOut := range tx.TxOut() {
+		// scriptClass, err := checkPkScriptStandard(txOut, msgTx, containsBindingTxIn, txStore)
+		// if err != nil {
+		// 	// Attempt to extract a reject code from the error so
+		// 	// it can be retained.  When not possible, fall back to
+		// 	// a non standard error.
+		// 	logging.CPrint(logging.ERROR, "checkPkScriptStandard error",
+		// 		logging.LogFormat{"index": i, "err": err})
+		// 	return err
+		// }
 
 		// Accumulate the number of outputs which only carry data.  For
 		// all other script types, ensure the output value is not
 		// "dust".
-		if scriptClass == txscript.NullDataTy {
+		if tx.GetPkScriptInfo(i).Class == byte(txscript.NullDataTy) {
 			numNullDataOutputs++
 		} else {
 			isDust, err := isDust(txOut, minRelayTxFee)

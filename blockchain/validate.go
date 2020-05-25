@@ -1535,15 +1535,20 @@ func (chain *Blockchain) checkConnectBlock(node *BlockNode, block *massutil.Bloc
 		if !SequenceLockActive(sequenceLock, node.Height, medianTime) {
 			return ErrSequenceNotSatisfied
 		}
-		containsBindingTxIn := make(map[txscript.ScriptClass]bool)
-		for i, txOut := range tx.MsgTx().TxOut {
-			_, err = checkPkScriptStandard(txOut, tx.MsgTx(), containsBindingTxIn, txInputStore)
-			if err != nil {
-				logging.CPrint(logging.ERROR, "checkPkScriptStandard error",
-					logging.LogFormat{"index": i, "err": err})
-				return err
-			}
+		err = checkParsePkScript(tx, txInputStore)
+		if err != nil {
+			logging.CPrint(logging.ERROR, "checkParsePkScript error", logging.LogFormat{"tx": tx.Hash(), "err": err})
+			return err
 		}
+		// containsBindingTxIn := make(map[txscript.ScriptClass]bool)
+		// for i, txOut := range tx.MsgTx().TxOut {
+		// 	psi, err = checkPkScriptStandard(txOut, tx.MsgTx(), containsBindingTxIn, txInputStore)
+		// 	if err != nil {
+		// 		logging.CPrint(logging.ERROR, "checkPkScriptStandard error",
+		// 			logging.LogFormat{"index": i, "err": err})
+		// 		return err
+		// 	}
+		// }
 	}
 
 	// Don't run scripts if this node is before the latest known good

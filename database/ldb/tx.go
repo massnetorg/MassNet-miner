@@ -1,6 +1,7 @@
 package ldb
 
 import (
+	"bytes"
 	"crypto/sha256"
 	"encoding/binary"
 	"fmt"
@@ -9,6 +10,7 @@ import (
 	"massnet.org/mass/consensus"
 	"massnet.org/mass/database"
 	"massnet.org/mass/database/storage"
+	"massnet.org/mass/debug"
 	"massnet.org/mass/logging"
 	"massnet.org/mass/wire"
 )
@@ -295,6 +297,12 @@ func (db *ChainDb) FetchLastFullySpentTxBeforeHeight(txsha *wire.Hash,
 		if err != nil {
 			return nil, 0, nil, err
 		}
+		if debug.DevMode() {
+			aSha := msgtx.TxHash()
+			if !bytes.Equal(aSha[:], txsha[:]) {
+				logging.CPrint(logging.FATAL, fmt.Sprintf("mismatched tx hash, expect: %v, actual: %v", txsha, aSha))
+			}
+		}
 		break
 	}
 	return
@@ -441,33 +449,30 @@ func (db *ChainDb) fetchTxDataBySha(txsha *wire.Hash) (rtx *wire.MsgTx, rblksha 
 	if err != nil {
 		rtxspent = nil
 	}
+	if debug.DevMode() {
+		aSha := rtx.TxHash()
+		if !bytes.Equal(aSha[:], txsha[:]) {
+			logging.CPrint(logging.FATAL, fmt.Sprintf("mismatched tx hash, expect: %v, actual: %v", txsha, aSha))
+		}
+	}
 	return
 }
 
 // fetchTxDataByLoc returns several pieces of data regarding the given tx
 // located by the block/offset/size location
 func (db *ChainDb) fetchTxDataByLoc(blkHeight uint64, txOff int, txLen int) (rtx *wire.MsgTx, rblksha *wire.Hash, err error) {
-	var blksha *wire.Hash
-	var blkbuf []byte
 
-	blksha, blkbuf, err = db.getBlkByHeight(blkHeight)
+	blksha, fileNo, blkOffset, _, err := db.getBlkLocByHeight(blkHeight)
 	if err != nil {
-		if err == storage.ErrNotFound {
-			err = database.ErrTxShaMissing
-		}
-		return
+		return nil, nil, err
 	}
-
-	//log.Trace("transaction %v is at block %v %v txoff %v, txlen %v\n",
-	//	txsha, blksha, blkHeight, txOff, txLen)
-
-	if len(blkbuf) < txOff+txLen {
-		err = database.ErrTxShaMissing
-		return
+	buf, err := db.blkFileKeeper.ReadRawTx(fileNo, blkOffset, int64(txOff), txLen)
+	if err != nil {
+		return nil, nil, err
 	}
 
 	var tx wire.MsgTx
-	err = tx.SetBytes(blkbuf[txOff:txOff+txLen], wire.DB)
+	err = tx.SetBytes(buf, wire.DB)
 	if err != nil {
 		logging.CPrint(logging.WARN, "unable to decode tx",
 			logging.LogFormat{"blockHash": blksha, "blockHeight": blkHeight, "txoff": txOff, "txlen": txLen})
@@ -504,6 +509,13 @@ func (db *ChainDb) FetchTxBySha(txsha *wire.Hash) ([]*database.TxReply, error) {
 			}
 			continue
 		}
+		if debug.DevMode() {
+			aSha := tx.TxHash()
+			if !bytes.Equal(aSha[:], txsha[:]) {
+				logging.CPrint(logging.FATAL, fmt.Sprintf("mismatched tx hash, expect: %v, actual: %v", txsha, aSha))
+			}
+		}
+
 		btxspent := make([]bool, len(tx.TxOut))
 		for i := range btxspent {
 			btxspent[i] = true

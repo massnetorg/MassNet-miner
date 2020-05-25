@@ -70,7 +70,6 @@ func NewBlockchain(db database.Db, dbPath string, server Server) (*Blockchain, e
 		dmd:            NewDoubleMiningDetector(db),
 		processBlockCh: make(chan *processBlockMsg, maxProcessBlockChSize),
 		errCache:       lru.New(blockErrCacheSize),
-		sigCache:       txscript.NewSigCache(sigCacheMaxSize),
 		hashCache:      txscript.NewHashCache(hashCacheMaxSize),
 		listeners:      make(map[Listener]struct{}),
 	}
@@ -288,26 +287,18 @@ func (chain *Blockchain) execProcessBlock(block *massutil.Block, flags BehaviorF
 }
 
 func (chain *Blockchain) BestBlockNode() *BlockNode {
-	chain.l.RLock()
-	defer chain.l.RUnlock()
 	return chain.blockTree.bestBlockNode()
 }
 
 func (chain *Blockchain) BestBlockHeader() *wire.BlockHeader {
-	chain.l.RLock()
-	defer chain.l.RUnlock()
 	return chain.blockTree.bestBlockNode().BlockHeader()
 }
 
 func (chain *Blockchain) BestBlockHeight() uint64 {
-	chain.l.RLock()
-	defer chain.l.RUnlock()
 	return chain.blockTree.bestBlockNode().Height
 }
 
 func (chain *Blockchain) BestBlockHash() *wire.Hash {
-	chain.l.RLock()
-	defer chain.l.RUnlock()
 	return chain.blockTree.bestBlockNode().Hash
 }
 
@@ -316,9 +307,6 @@ func (chain *Blockchain) GetBlockByHash(hash *wire.Hash) (*massutil.Block, error
 }
 
 func (chain *Blockchain) GetBlockByHeight(height uint64) (*massutil.Block, error) {
-	chain.l.RLock()
-	defer chain.l.RUnlock()
-
 	hash, err := chain.db.FetchBlockShaByHeight(height)
 	if err != nil {
 		return nil, err
@@ -334,9 +322,6 @@ func (chain *Blockchain) GetHeaderByHash(hash *wire.Hash) (*wire.BlockHeader, er
 }
 
 func (chain *Blockchain) GetHeaderByHeight(height uint64) (*wire.BlockHeader, error) {
-	chain.l.RLock()
-	defer chain.l.RUnlock()
-
 	hash, err := chain.db.FetchBlockShaByHeight(height)
 	if err != nil {
 		return nil, err
@@ -345,21 +330,14 @@ func (chain *Blockchain) GetHeaderByHeight(height uint64) (*wire.BlockHeader, er
 }
 
 func (chain *Blockchain) GetBlockHashByHeight(height uint64) (*wire.Hash, error) {
-	chain.l.RLock()
-	defer chain.l.RUnlock()
 	return chain.db.FetchBlockShaByHeight(height)
 }
 
 func (chain *Blockchain) GetTransactionInDB(hash *wire.Hash) ([]*database.TxReply, error) {
-	chain.l.RLock()
-	defer chain.l.RUnlock()
 	return chain.db.FetchTxBySha(hash)
 }
 
 func (chain *Blockchain) InMainChain(hash wire.Hash) bool {
-	chain.l.RLock()
-	defer chain.l.RUnlock()
-
 	if node, exists := chain.blockTree.getBlockNode(&hash); exists {
 		return node.InMainChain
 	}
@@ -375,8 +353,6 @@ func (chain *Blockchain) InMainChain(hash wire.Hash) bool {
 }
 
 func (chain *Blockchain) FetchMinedBlocks(pubKey *pocec.PublicKey) ([]uint64, error) {
-	chain.l.RLock()
-	defer chain.l.RUnlock()
 	return chain.db.FetchMinedBlocks(pubKey)
 }
 
@@ -480,19 +456,13 @@ func (chain *Blockchain) CurrentIndexHeight() uint64 {
 }
 
 func (chain *Blockchain) GetRewardStakingTx(height uint64) ([]database.Reward, uint32, error) {
-	chain.l.RLock()
-	defer chain.l.RUnlock()
 	return chain.db.FetchRewardStakingTx(height)
 }
 
 func (chain *Blockchain) GetInStakingTx(height uint64) ([]database.Reward, uint32, error) {
-	chain.l.RLock()
-	defer chain.l.RUnlock()
 	return chain.db.FetchInStakingTx(height)
 }
 
 func (chain *Blockchain) FetchScriptHashRelatedBindingTx(scriptHash []byte, chainParams *config.Params) ([]*database.BindingTxReply, error) {
-	chain.l.RLock()
-	defer chain.l.RUnlock()
 	return chain.db.FetchScriptHashRelatedBindingTx(scriptHash, chainParams)
 }

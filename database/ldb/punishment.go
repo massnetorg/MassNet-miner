@@ -1,7 +1,11 @@
 package ldb
 
 import (
+	"bytes"
+	"encoding/binary"
+
 	"massnet.org/mass/database/storage"
+	"massnet.org/mass/massutil"
 	"massnet.org/mass/pocec"
 	"massnet.org/mass/wire"
 )
@@ -89,4 +93,34 @@ func (db *ChainDb) fetchAllPunishment() ([]*wire.FaultPubKey, error) {
 		return nil, err
 	}
 	return res, nil
+}
+
+func insertBlockPunishments(batch storage.Batch, blk *massutil.Block) error {
+	faultPks := blk.MsgBlock().Proposals.PunishmentArea
+	var b2 [2]byte
+	binary.LittleEndian.PutUint16(b2[0:2], uint16(len(faultPks)))
+
+	var shaListData bytes.Buffer
+	shaListData.Write(b2[:])
+
+	for _, fpk := range faultPks {
+		sha := wire.DoubleHashH(fpk.PubKey.SerializeUncompressed())
+		shaListData.Write(sha.Bytes())
+		err := insertFaultPk(batch, blk.Height(), fpk, &sha)
+		if err != nil {
+			return err
+		}
+	}
+
+	// table - BANHGT
+	heightIndex := faultPkHeightToKey(blk.Height())
+	if err := batch.Put(heightIndex, shaListData.Bytes()); err != nil {
+		return err
+	}
+	// table - PUNISH
+	for _, pk := range faultPks {
+		key := punishmentPubKeyToKey(pk.PubKey)
+		batch.Delete(key)
+	}
+	return nil
 }
