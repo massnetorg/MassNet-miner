@@ -104,6 +104,11 @@ func (ws *WorkSpace) Delete() error {
 	return <-result
 }
 
+func (ws *WorkSpace) Close() error {
+	ws.StopPlot()
+	return ws.db.Close()
+}
+
 type WorkSpaceMap struct {
 	m cmap.ConcurrentMap
 }
@@ -145,4 +150,49 @@ func (m *WorkSpaceMap) Items() map[string]*WorkSpace {
 
 func (m *WorkSpaceMap) Count() int {
 	return m.m.Count()
+}
+
+type WorkSpacePath struct {
+	directory string
+	spaces    []*WorkSpace
+	exists    map[string]*WorkSpace // sid -> WorkSpace
+}
+
+func NewWorkSpacePath(dir string) *WorkSpacePath {
+	return &WorkSpacePath{
+		directory: dir,
+		spaces:    make([]*WorkSpace, 0),
+		exists:    make(map[string]*WorkSpace),
+	}
+}
+
+func (p *WorkSpacePath) Add(ws *WorkSpace) {
+	sid := ws.id.String()
+	if _, exists := p.exists[sid]; exists {
+		return
+	}
+
+	p.exists[sid] = ws
+	if len(p.spaces) == 0 {
+		p.insert(0, ws)
+		return
+	}
+	priority := newQueuedWorkSpace(ws, false).priority()
+	for i := range p.spaces {
+		if priority > newQueuedWorkSpace(p.spaces[i], false).priority() {
+			p.insert(i, ws)
+			return
+		}
+	}
+	p.insert(len(p.spaces), ws)
+}
+
+func (p *WorkSpacePath) insert(i int, ws *WorkSpace) {
+	p.spaces = append(p.spaces, ws)
+	copy(p.spaces[i+1:], p.spaces[i:])
+	p.spaces[i] = ws
+}
+
+func (p *WorkSpacePath) WorkSpaces() []*WorkSpace {
+	return p.spaces
 }

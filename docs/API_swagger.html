@@ -207,6 +207,14 @@
                 </li>
               
                 <li>
+                  <a href="#rpcprotobuf.ConfigureSpaceKeeperByDirsRequest"><span class="badge">M</span>ConfigureSpaceKeeperByDirsRequest</a>
+                </li>
+              
+                <li>
+                  <a href="#rpcprotobuf.ConfigureSpaceKeeperByDirsRequest.Allocation"><span class="badge">M</span>ConfigureSpaceKeeperByDirsRequest.Allocation</a>
+                </li>
+              
+                <li>
                   <a href="#rpcprotobuf.ConfigureSpaceKeeperRequest"><span class="badge">M</span>ConfigureSpaceKeeperRequest</a>
                 </li>
               
@@ -412,6 +420,14 @@
               
                 <li>
                   <a href="#rpcprotobuf.WorkSpaceResponse"><span class="badge">M</span>WorkSpaceResponse</a>
+                </li>
+              
+                <li>
+                  <a href="#rpcprotobuf.WorkSpacesByDirsResponse"><span class="badge">M</span>WorkSpacesByDirsResponse</a>
+                </li>
+              
+                <li>
+                  <a href="#rpcprotobuf.WorkSpacesByDirsResponse.Allocation"><span class="badge">M</span>WorkSpacesByDirsResponse.Allocation</a>
                 </li>
               
                 <li>
@@ -653,6 +669,75 @@
                 <tr>
                   <td>type</td>
                   <td><a href="#string">string</a></td>
+                  <td></td>
+                  <td><p> </p></td>
+                </tr>
+              
+            </tbody>
+          </table>
+
+          
+
+        
+      
+        <h3 id="rpcprotobuf.ConfigureSpaceKeeperByDirsRequest">ConfigureSpaceKeeperByDirsRequest</h3>
+        <p></p>
+
+        
+          <table class="field-table">
+            <thead>
+              <tr><td>Field</td><td>Type</td><td>Label</td><td>Description</td></tr>
+            </thead>
+            <tbody>
+              
+                <tr>
+                  <td>allocations</td>
+                  <td><a href="#rpcprotobuf.ConfigureSpaceKeeperByDirsRequest.Allocation">ConfigureSpaceKeeperByDirsRequest.Allocation</a></td>
+                  <td>repeated</td>
+                  <td><p> </p></td>
+                </tr>
+              
+                <tr>
+                  <td>payout_addresses</td>
+                  <td><a href="#string">string</a></td>
+                  <td>repeated</td>
+                  <td><p> </p></td>
+                </tr>
+              
+                <tr>
+                  <td>passphrase</td>
+                  <td><a href="#string">string</a></td>
+                  <td></td>
+                  <td><p> </p></td>
+                </tr>
+              
+            </tbody>
+          </table>
+
+          
+
+        
+      
+        <h3 id="rpcprotobuf.ConfigureSpaceKeeperByDirsRequest.Allocation">ConfigureSpaceKeeperByDirsRequest.Allocation</h3>
+        <p></p>
+
+        
+          <table class="field-table">
+            <thead>
+              <tr><td>Field</td><td>Type</td><td>Label</td><td>Description</td></tr>
+            </thead>
+            <tbody>
+              
+                <tr>
+                  <td>directory</td>
+                  <td><a href="#string">string</a></td>
+                  <td></td>
+                  <td><p> </p></td>
+                </tr>
+              
+                <tr>
+                  <td>capacity</td>
+                  <td><a href="#uint64">uint64</a></td>
                   <td></td>
                   <td><p> </p></td>
                 </tr>
@@ -3368,6 +3453,96 @@
 
         
       
+        <h3 id="rpcprotobuf.WorkSpacesByDirsResponse">WorkSpacesByDirsResponse</h3>
+        <p></p>
+
+        
+          <table class="field-table">
+            <thead>
+              <tr><td>Field</td><td>Type</td><td>Label</td><td>Description</td></tr>
+            </thead>
+            <tbody>
+              
+                <tr>
+                  <td>directory_count</td>
+                  <td><a href="#uint32">uint32</a></td>
+                  <td></td>
+                  <td><p> </p></td>
+                </tr>
+              
+                <tr>
+                  <td>allocations</td>
+                  <td><a href="#rpcprotobuf.WorkSpacesByDirsResponse.Allocation">WorkSpacesByDirsResponse.Allocation</a></td>
+                  <td>repeated</td>
+                  <td><p> </p></td>
+                </tr>
+              
+                <tr>
+                  <td>error_code</td>
+                  <td><a href="#uint32">uint32</a></td>
+                  <td></td>
+                  <td><p> </p></td>
+                </tr>
+              
+                <tr>
+                  <td>error_message</td>
+                  <td><a href="#string">string</a></td>
+                  <td></td>
+                  <td><p> </p></td>
+                </tr>
+              
+            </tbody>
+          </table>
+
+          
+
+        
+      
+        <h3 id="rpcprotobuf.WorkSpacesByDirsResponse.Allocation">WorkSpacesByDirsResponse.Allocation</h3>
+        <p></p>
+
+        
+          <table class="field-table">
+            <thead>
+              <tr><td>Field</td><td>Type</td><td>Label</td><td>Description</td></tr>
+            </thead>
+            <tbody>
+              
+                <tr>
+                  <td>directory</td>
+                  <td><a href="#string">string</a></td>
+                  <td></td>
+                  <td><p> </p></td>
+                </tr>
+              
+                <tr>
+                  <td>capacity</td>
+                  <td><a href="#string">string</a></td>
+                  <td></td>
+                  <td><p> </p></td>
+                </tr>
+              
+                <tr>
+                  <td>space_count</td>
+                  <td><a href="#uint32">uint32</a></td>
+                  <td></td>
+                  <td><p> </p></td>
+                </tr>
+              
+                <tr>
+                  <td>spaces</td>
+                  <td><a href="#rpcprotobuf.WorkSpace">WorkSpace</a></td>
+                  <td>repeated</td>
+                  <td><p> </p></td>
+                </tr>
+              
+            </tbody>
+          </table>
+
+          
+
+        
+      
         <h3 id="rpcprotobuf.WorkSpacesResponse">WorkSpacesResponse</h3>
         <p></p>
 
@@ -3529,6 +3704,20 @@
                 <td>ConfigureCapacity</td>
                 <td><a href="#rpcprotobuf.ConfigureSpaceKeeperRequest">ConfigureSpaceKeeperRequest</a></td>
                 <td><a href="#rpcprotobuf.WorkSpacesResponse">WorkSpacesResponse</a></td>
+                <td><p></p></td>
+              </tr>
+            
+              <tr>
+                <td>GetCapacitySpacesByDirs</td>
+                <td><a href="#google.protobuf.Empty">.google.protobuf.Empty</a></td>
+                <td><a href="#rpcprotobuf.WorkSpacesByDirsResponse">WorkSpacesByDirsResponse</a></td>
+                <td><p></p></td>
+              </tr>
+            
+              <tr>
+                <td>ConfigureCapacityByDirs</td>
+                <td><a href="#rpcprotobuf.ConfigureSpaceKeeperByDirsRequest">ConfigureSpaceKeeperByDirsRequest</a></td>
+                <td><a href="#rpcprotobuf.WorkSpacesByDirsResponse">WorkSpacesByDirsResponse</a></td>
                 <td><p></p></td>
               </tr>
             
@@ -3808,6 +3997,26 @@
                 <td>ConfigureCapacity</td>
                 <td>POST</td>
                 <td>/v1/spaces</td>
+                <td>*</td>
+              </tr>
+              
+            
+              
+              
+              <tr>
+                <td>GetCapacitySpacesByDirs</td>
+                <td>GET</td>
+                <td>/v1/spaces/directory</td>
+                <td></td>
+              </tr>
+              
+            
+              
+              
+              <tr>
+                <td>ConfigureCapacityByDirs</td>
+                <td>POST</td>
+                <td>/v1/spaces/directory</td>
                 <td>*</td>
               </tr>
               

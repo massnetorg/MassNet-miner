@@ -42,7 +42,7 @@ func (mdb *MassDBV1) Type() string {
 }
 
 func (mdb *MassDBV1) Close() error {
-	mdb.StopPlot()
+	<-mdb.StopPlot()
 
 	if mdb.HashMapA != nil {
 		mdb.HashMapA.Close()

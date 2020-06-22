@@ -123,6 +123,17 @@ service ApiService {
               body: "*"
         };
     }
+    rpc GetCapacitySpacesByDirs (google.protobuf.Empty) returns (WorkSpacesByDirsResponse) {
+        option (google.api.http) = {
+            get: "/v1/spaces/directory"
+        };
+    }
+    rpc ConfigureCapacityByDirs (ConfigureSpaceKeeperByDirsRequest) returns (WorkSpacesByDirsResponse) {
+        option (google.api.http) = {
+              post: "/v1/spaces/directory"
+              body: "*"
+        };
+    }
     rpc GetCapacitySpace (WorkSpaceRequest) returns (WorkSpaceResponse) {
         option (google.api.http) = {
             get: "/v1/spaces/{space_id}"
@@ -541,6 +552,29 @@ message WorkSpacesResponse {
 message ActOnSpaceKeeperResponse {
     uint32 error_code    = 1;
     string error_message = 2;
+}
+
+message ConfigureSpaceKeeperByDirsRequest {
+    message Allocation {
+        string directory = 1;
+        uint64 capacity  = 2;
+    }
+    repeated Allocation allocations = 1;
+    repeated string payout_addresses = 2;
+    string passphrase = 3;
+}
+
+message WorkSpacesByDirsResponse {
+    message Allocation {
+        string directory = 1;
+        string capacity = 2;
+        uint32 space_count = 3;
+        repeated WorkSpace spaces = 4;
+    }
+    uint32 directory_count = 1;
+    repeated Allocation allocations = 2;
+    uint32 error_code = 3;
+    string error_message = 4;
 }
 
 message GetClientStatusResponse{

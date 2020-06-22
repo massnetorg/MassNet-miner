@@ -2,6 +2,8 @@ package capacity
 
 import (
 	"context"
+	"os"
+	"path/filepath"
 	"sync"
 	"sync/atomic"
 
@@ -42,6 +44,7 @@ type SpaceKeeper struct {
 	dbType                string
 	wallet                PoCWallet
 	workSpaceIndex        []*WorkSpaceMap
+	workSpacePaths        map[string]*WorkSpacePath
 	workSpaceList         []*WorkSpace
 	queue                 *plotterQueue
 	newQueuedWorkSpaceCh  chan *queuedWorkSpace
@@ -473,15 +476,24 @@ func (sk *SpaceKeeper) ResetDBDirs(dbDirs []string) error {
 		return ErrSpaceKeeperIsRunning
 	}
 
+	absDirs := make([]string, len(dbDirs))
+	for i := range dbDirs {
+		absDir, err := filepath.Abs(dbDirs[i])
+		if err != nil {
+			return ErrInvalidDir
+		}
+		absDirs[i] = absDir
+	}
+
 	var strSliceEqual = func() bool {
-		if len(dbDirs) != len(sk.dbDirs) {
+		if len(absDirs) != len(sk.dbDirs) {
 			return false
 		}
 		existsDir := make(map[string]struct{})
 		for _, dir := range sk.dbDirs {
 			existsDir[dir] = struct{}{}
 		}
-		for _, dir := range dbDirs {
+		for _, dir := range absDirs {
 			if _, ok := existsDir[dir]; !ok {
 				return false
 			}
@@ -490,7 +502,7 @@ func (sk *SpaceKeeper) ResetDBDirs(dbDirs []string) error {
 	}
 
 	if len(sk.dbDirs) == 0 {
-		sk.dbDirs = dbDirs
+		sk.dbDirs = absDirs
 		if err := sk.generateInitialIndex(); err != nil {
 			return err
 		}
@@ -515,11 +527,11 @@ func (sk *SpaceKeeper) AvailableDiskSize() uint64 {
 }
 
 // TODO: consider more check items
-func (sk *SpaceKeeper) checkOSDiskSize(requiredBytes int) error {
+func checkOSDiskSizeByPath(path string, requiredBytes int) error {
 	if requiredBytes < 0 {
 		return ErrInvalidRequiredBytes
 	}
-	info, err := disk.Usage(sk.dbDirs[0])
+	info, err := disk.Usage(path)
 	if err != nil {
 		return err
 	}
@@ -527,6 +539,10 @@ func (sk *SpaceKeeper) checkOSDiskSize(requiredBytes int) error {
 		return ErrOSDiskSizeNotEnough
 	}
 	return nil
+}
+
+func (sk *SpaceKeeper) checkOSDiskSize(requiredBytes int) error {
+	return checkOSDiskSizeByPath(sk.dbDirs[0], requiredBytes)
 }
 
 func usableBitLength() []int {
@@ -624,6 +640,14 @@ func (sk *SpaceKeeper) addWorkSpaceToIndex(ws *WorkSpace) {
 		return
 	}
 
+	if p, ok := sk.workSpacePaths[ws.rootDir]; ok {
+		p.Add(ws)
+	} else {
+		p = NewWorkSpacePath(ws.rootDir)
+		p.Add(ws)
+		sk.workSpacePaths[ws.rootDir] = p
+	}
+
 	sk.workSpaceIndex[allState].Set(sid, ws)
 	sk.workSpaceIndex[ws.state].Set(sid, ws)
 	return
@@ -631,12 +655,17 @@ func (sk *SpaceKeeper) addWorkSpaceToIndex(ws *WorkSpace) {
 
 // generateNewWorkSpace is not thread safe, should use lock in upper functions
 func (sk *SpaceKeeper) generateNewWorkSpace(bitLength int) (*WorkSpace, error) {
+	return sk.generateNewWorkSpaceByPath(sk.dbDirs[0], bitLength)
+}
+
+// generateNewWorkSpaceByPath is not thread safe, should use lock in upper functions
+func (sk *SpaceKeeper) generateNewWorkSpaceByPath(rootDir string, bitLength int) (*WorkSpace, error) {
 	pubKey, ordinal, err := sk.wallet.GenerateNewPublicKey()
 	if err != nil {
 		return nil, err
 	}
 
-	return NewWorkSpace(sk.dbType, sk.dbDirs[0], int64(ordinal), pubKey, bitLength)
+	return NewWorkSpace(sk.dbType, rootDir, int64(ordinal), pubKey, bitLength)
 }
 
 // resetWorkSpaceList is not thread safe, should use lock in upper functions
@@ -690,6 +719,7 @@ func (sk *SpaceKeeper) ConfigureByBitLength(BlCount map[int]int, execPlot, execM
 			"bl_count":  BlCount,
 			"exec_plot": execPlot,
 			"exec_mine": execMine,
+			"err":       err,
 		})
 		return nil, err
 	}
@@ -801,6 +831,7 @@ func (sk *SpaceKeeper) ConfigureBySize(targetSize uint64, execPlot, execMine boo
 	var failureReturn = func(err error) ([]engine.WorkSpaceInfo, error) {
 		logging.CPrint(logging.ERROR, "fail on ConfigureBySize", logging.LogFormat{
 			"target_size": targetSize,
+			"err":         err,
 		})
 		return nil, err
 	}
@@ -921,6 +952,7 @@ func (sk *SpaceKeeper) ConfigureByPubKey(PubKeyBL map[*pocec.PublicKey]int, PubK
 		logging.CPrint(logging.ERROR, "fail on ConfigureByPubKey", logging.LogFormat{
 			"exec_plot": execPlot,
 			"exec_mine": execMine,
+			"err":       err,
 		})
 		return nil, err
 	}
@@ -946,6 +978,9 @@ func (sk *SpaceKeeper) ConfigureByPubKey(PubKeyBL map[*pocec.PublicKey]int, PubK
 }
 
 func (sk *SpaceKeeper) generateFillSpaceListByPubKey(dstList []*WorkSpace, targetPubKeyBL map[*pocec.PublicKey]int, pubKeyOrdinal map[*pocec.PublicKey]int) ([]*WorkSpace, error) {
+	if !sk.allowGenerateNewSpace {
+		return nil, ErrWorkSpaceCannotGenerate
+	}
 	// check OS disk size
 	var requiredOSDiskSize int
 	for pubKey, bl := range targetPubKeyBL {
@@ -1005,11 +1040,193 @@ func (sk *SpaceKeeper) ConfigureByFlags(flags engine.WorkSpaceStateFlags, execPl
 			"flags":     flags,
 			"exec_plot": execPlot,
 			"exec_mine": execMine,
+			"err":       err,
 		})
 		return nil, err
 	}
 	atomic.StoreInt32(&sk.configured, 1)
 	return wsiList, nil
+}
+
+func (sk *SpaceKeeper) WorkSpaceInfosByDirs() (dirs []string, results [][]engine.WorkSpaceInfo, err error) {
+	sk.stateLock.RLock()
+	defer sk.stateLock.RUnlock()
+
+	for _, dir := range sk.dbDirs {
+		p, ok := sk.workSpacePaths[dir]
+		if !ok {
+			continue
+		}
+		wsList := p.WorkSpaces()
+		infos := make([]engine.WorkSpaceInfo, 0, len(wsList))
+		for _, ws := range wsList {
+			if ws.using {
+				infos = append(infos, ws.Info())
+			}
+		}
+		dirs = append(dirs, dir)
+		results = append(results, infos)
+	}
+	return
+}
+
+func (sk *SpaceKeeper) ConfigureByPath(paths []string, sizes []int, execPlot, execMine bool) ([]engine.WorkSpaceInfo, error) {
+	if sk.Started() {
+		return nil, ErrSpaceKeeperIsRunning
+	}
+	if sk.wallet.IsLocked() {
+		return nil, ErrWalletIsLocked
+	}
+	if !atomic.CompareAndSwapInt32(&sk.configuring, 0, 1) {
+		return nil, ErrSpaceKeeperIsConfiguring
+	}
+	defer atomic.StoreInt32(&sk.configuring, 0)
+	atomic.StoreInt32(&sk.configured, 0)
+
+	var failureReturn = func(err error) ([]engine.WorkSpaceInfo, error) {
+		logging.CPrint(logging.ERROR, "fail on ConfigureByPath", logging.LogFormat{
+			"paths": paths,
+			"sizes": sizes,
+			"err":   err,
+		})
+		return nil, err
+	}
+
+	if len(paths) == 0 || len(paths) != len(sizes) {
+		return failureReturn(ErrConfigInvalidPathSize)
+	}
+
+	// check paths
+	absDirs := make([]string, len(paths))
+	for i, dir := range paths {
+		absDir, err := filepath.Abs(dir)
+		if err != nil {
+			logging.CPrint(logging.ERROR, "fail to get abs path", logging.LogFormat{"dir": dir, "err": err})
+			return failureReturn(ErrInvalidDir)
+		}
+		if fi, err := os.Stat(absDir); err != nil {
+			if !os.IsNotExist(err) {
+				logging.CPrint(logging.ERROR, "fail to get file stat", logging.LogFormat{"err": err})
+				return failureReturn(ErrInvalidDir)
+			}
+			if err = os.MkdirAll(absDir, 0700); err != nil {
+				logging.CPrint(logging.ERROR, "mkdir failed", logging.LogFormat{"dir": absDir, "err": err})
+				return failureReturn(ErrInvalidDir)
+			}
+		} else if !fi.IsDir() {
+			logging.CPrint(logging.ERROR, "not directory", logging.LogFormat{"dir": absDir})
+			return failureReturn(ErrInvalidDir)
+		}
+		absDirs[i] = absDir
+	}
+
+	// re-generate initial index
+	sk.dbDirs = absDirs
+	if err := sk.generateInitialIndex(); err != nil {
+		logging.CPrint(logging.ERROR, "fail to re-generate initial index", logging.LogFormat{"err": err})
+		return failureReturn(err)
+	}
+
+	// fill workSpaces
+	var resultList = make([]*WorkSpace, 0)
+	var successfullyReturn = func() ([]engine.WorkSpaceInfo, error) {
+		wsiList, err := sk.applyConfiguredWorkSpaces(resultList, execPlot, execMine)
+		if err != nil {
+			return failureReturn(err)
+		}
+		atomic.StoreInt32(&sk.configured, 1)
+		return wsiList, nil
+	}
+
+	for i := range absDirs {
+		var currentSize, targetSize = 0, sizes[i]
+		var finished bool
+		var pathResultList = make([]*WorkSpace, 0)
+		// try to fill list by indexed spaces
+		pathResultList, currentSize, finished = fillSpaceListByPathSize(absDirs[i], pathResultList, sk.getIndexedWorkSpaces(), currentSize, targetSize)
+		if finished {
+			resultList = append(resultList, pathResultList...)
+			continue
+		}
+		// try to generate new WorkSpace to fill list
+		var err error
+		pathResultList, _, err = sk.generateFillSpaceListByPathSize(absDirs[i], pathResultList, currentSize, targetSize)
+		if err != nil {
+			return failureReturn(err)
+		}
+		resultList = append(resultList, pathResultList...)
+	}
+
+	return successfullyReturn()
+}
+
+func fillSpaceListByPathSize(path string, dstList []*WorkSpace, srcMap map[int][]*WorkSpace, currentSize, targetSize int) ([]*WorkSpace, int, bool) {
+	// get allowed BitLength in decreasing order
+	allowedBL := usableBitLength()
+	tmpLen := len(allowedBL)
+	for i := 0; i < tmpLen/2; i++ {
+		allowedBL[i], allowedBL[tmpLen-1-i] = allowedBL[tmpLen-1-i], allowedBL[i]
+	}
+	// fill list by WorkSpaces from srcMap, until targetSize is satisfied
+	for _, bl := range allowedBL {
+		if _, exists := srcMap[bl]; !exists {
+			continue
+		}
+		for _, space := range srcMap[bl] {
+			if space.rootDir != path {
+				continue
+			}
+			currentSize += poc.BitLengthDiskSize[bl]
+			if currentSize > targetSize {
+				currentSize -= poc.BitLengthDiskSize[bl]
+				continue
+			}
+			dstList = append(dstList, space)
+		}
+	}
+
+	// returns true if target size is satisfied
+	if currentSize == targetSize || targetSize-currentSize < poc.MinDiskSize {
+		return dstList, currentSize, true
+	}
+
+	// returns false if target size is not satisfied
+	return dstList, currentSize, false
+}
+
+func (sk *SpaceKeeper) generateFillSpaceListByPathSize(path string, dstList []*WorkSpace, currentSize, targetSize int) ([]*WorkSpace, int, error) {
+	if !sk.allowGenerateNewSpace {
+		return nil, currentSize, ErrWorkSpaceCannotGenerate
+	}
+	// check os disk size by path
+	if err := checkOSDiskSizeByPath(path, targetSize-currentSize); err != nil {
+		return nil, currentSize, err
+	}
+	// get allowed BitLength in decreasing order
+	allowedBL := usableBitLength()
+	tmpLen := len(allowedBL)
+	for i := 0; i < tmpLen/2; i++ {
+		allowedBL[i], allowedBL[tmpLen-1-i] = allowedBL[tmpLen-1-i], allowedBL[i]
+	}
+	// generate new WorkSpaces of different BitLengths, until targetSize is satisfied
+	for _, bl := range allowedBL {
+	out:
+		for {
+			if targetSize-currentSize < poc.BitLengthDiskSize[bl] {
+				// Current BitLength is too large
+				break out
+			}
+			currentSize += poc.BitLengthDiskSize[bl]
+			newWS, err := sk.generateNewWorkSpaceByPath(path, bl)
+			if err != nil {
+				return nil, currentSize, err
+			}
+			sk.addWorkSpaceToIndex(newWS)
+			dstList = append(dstList, newWS)
+		}
+	}
+
+	return dstList, currentSize, nil
 }
 
 func deleteFromSlice(src []*WorkSpace, sid string) []*WorkSpace {

@@ -302,6 +302,58 @@
         ]
       }
     },
+    "/v1/spaces/directory": {
+      "get": {
+        "operationId": "GetCapacitySpacesByDirs",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/rpcprotobufWorkSpacesByDirsResponse"
+            }
+          },
+          "404": {
+            "description": "Not found.",
+            "schema": {
+              "format": "string"
+            }
+          }
+        },
+        "tags": [
+          "ApiService"
+        ]
+      },
+      "post": {
+        "operationId": "ConfigureCapacityByDirs",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/rpcprotobufWorkSpacesByDirsResponse"
+            }
+          },
+          "404": {
+            "description": "Not found.",
+            "schema": {
+              "format": "string"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "body",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "$ref": "#/definitions/rpcprotobufConfigureSpaceKeeperByDirsRequest"
+            }
+          }
+        ],
+        "tags": [
+          "ApiService"
+        ]
+      }
+    },
     "/v1/spaces/mine": {
       "post": {
         "operationId": "MineCapacitySpaces",
@@ -1082,6 +1134,38 @@
         },
         "type": {
           "type": "string"
+        }
+      }
+    },
+    "rpcprotobufConfigureSpaceKeeperByDirsRequest": {
+      "type": "object",
+      "properties": {
+        "allocations": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/rpcprotobufConfigureSpaceKeeperByDirsRequestAllocation"
+          }
+        },
+        "payout_addresses": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "passphrase": {
+          "type": "string"
+        }
+      }
+    },
+    "rpcprotobufConfigureSpaceKeeperByDirsRequestAllocation": {
+      "type": "object",
+      "properties": {
+        "directory": {
+          "type": "string"
+        },
+        "capacity": {
+          "type": "string",
+          "format": "uint64"
         }
       }
     },
@@ -2217,6 +2301,49 @@
         },
         "error_message": {
           "type": "string"
+        }
+      }
+    },
+    "rpcprotobufWorkSpacesByDirsResponse": {
+      "type": "object",
+      "properties": {
+        "directory_count": {
+          "type": "integer",
+          "format": "int64"
+        },
+        "allocations": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/rpcprotobufWorkSpacesByDirsResponseAllocation"
+          }
+        },
+        "error_code": {
+          "type": "integer",
+          "format": "int64"
+        },
+        "error_message": {
+          "type": "string"
+        }
+      }
+    },
+    "rpcprotobufWorkSpacesByDirsResponseAllocation": {
+      "type": "object",
+      "properties": {
+        "directory": {
+          "type": "string"
+        },
+        "capacity": {
+          "type": "string"
+        },
+        "space_count": {
+          "type": "integer",
+          "format": "int64"
+        },
+        "spaces": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/rpcprotobufWorkSpace"
+          }
         }
       }
     },
