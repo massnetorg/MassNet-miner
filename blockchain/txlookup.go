@@ -350,7 +350,7 @@ func (chain *Blockchain) FetchTransactionStore(tx *massutil.Tx, includeSpent boo
 	return txStore
 }
 
-func connectStakingTransactions(txStore database.StakingTxMapReply, block *massutil.Block) error {
+func connectStakingTransactions(txStore database.StakingNodes, block *massutil.Block) error {
 	// Loop through all of the transactions in the block to see if any of
 	// them are ones we need to update and spend based on the results map.
 	for _, tx := range block.Transactions() {
@@ -367,24 +367,22 @@ func connectStakingTransactions(txStore database.StakingTxMapReply, block *massu
 
 				stakingTxInfo := database.StakingTxInfo{Value: uint64(txOut.Value), FrozenPeriod: frozenPeriod, BlkHeight: block.Height()}
 				outPoint := wire.OutPoint{Hash: msgTx.TxHash(), Index: uint32(i)}
-				if _, exist := txStore[rsh]; exist {
-					txStore[rsh][outPoint] = stakingTxInfo
-				} else {
-					m := make(map[wire.OutPoint]database.StakingTxInfo)
-					m[outPoint] = stakingTxInfo
-					txStore[rsh] = m
+				if !txStore.Get(rsh).Put(outPoint, stakingTxInfo) {
+					return ErrDuplicateStaking
 				}
 			}
 		}
 	}
 
-	for rsh, value := range txStore {
-		for k, v := range value {
-			if uint64(block.Height()) == v.BlkHeight+v.FrozenPeriod {
-				delete(value, k)
+	for rsh, node := range txStore {
+		for _, m := range node {
+			for k, v := range m {
+				if block.Height() == v.BlkHeight+v.FrozenPeriod {
+					delete(m, k)
+				}
 			}
 		}
-		if len(txStore[rsh]) == 0 {
+		if txStore.IsEmpty(rsh) {
 			delete(txStore, rsh)
 		}
 	}
@@ -392,21 +390,21 @@ func connectStakingTransactions(txStore database.StakingTxMapReply, block *massu
 	return nil
 }
 
-func disconnectStakingTransactions(db database.Db, txStore database.StakingTxMapReply, block *massutil.Block) error {
+func disconnectStakingTransactions(db database.Db, txStore database.StakingNodes, block *massutil.Block) error {
 	// Loop through all of the transactions in the block to see if any of
 	// them are ones that need to be undone based on the transaction store.
 
-	txlist, err := db.FetchExpiredStakingTxListByHeight(uint64(block.Height()))
+	txlist, err := db.FetchExpiredStakingTxListByHeight(block.Height())
 	if err != nil {
 		return err
 	}
 
-	for rsh, value := range txlist {
-		if _, exist := txStore[rsh]; !exist {
-			txStore[rsh] = value
-		} else {
-			for k, v := range value {
-				txStore[rsh][k] = v
+	for rsh, node := range txlist {
+		for _, m := range node {
+			for k, v := range m {
+				if !txStore.Get(rsh).Put(k, v) {
+					return ErrDuplicateStaking
+				}
 			}
 		}
 	}
@@ -425,36 +423,36 @@ func disconnectStakingTransactions(db database.Db, txStore database.StakingTxMap
 				if err != nil {
 					return err
 				}
-				if value, exist := txStore[rsh]; exist {
-					outPoint := wire.OutPoint{Hash: msgTx.TxHash(), Index: uint32(i)}
-					if _, ok := value[outPoint]; ok {
-						logging.CPrint(logging.INFO, "disconnect staking transaction", logging.LogFormat{"txid": outPoint.Hash, "index": outPoint.Index, "block height": value[outPoint].BlkHeight})
-						delete(value, outPoint)
-					} else {
-						err := fmt.Sprintf("Can`t find the stakingTx (rsh:%v, txid:%v ,index:%v) in StakingTxMapReply", rsh, msgTx.TxHash(), i)
-						return errors.New(err)
-					}
-					if len(txStore[rsh]) == 0 {
-						delete(txStore, rsh)
-					}
-				} else {
-					err := fmt.Sprintf("Can`t find the stakingTx (rsh:%v, txid:%v ,index:%v) in StakingTxMapReply", rsh, msgTx.TxHash(), i)
+
+				outPoint := wire.OutPoint{Hash: msgTx.TxHash(), Index: uint32(i)}
+				if !txStore.Delete(rsh, block.Height(), outPoint) {
+					err := fmt.Sprintf("Can`t find the stakingTx (rsh:%v, txid:%v ,index:%v) in StakingNodes", rsh, msgTx.TxHash(), i)
 					return errors.New(err)
+				} else {
+					logging.CPrint(logging.INFO, "disconnect staking transaction",
+						logging.LogFormat{
+							"txid":   outPoint.Hash,
+							"index":  outPoint.Index,
+							"height": block.Height(),
+						})
+				}
+				if txStore.IsEmpty(rsh) {
+					delete(txStore, rsh)
 				}
 			}
 		}
-
 	}
-
 	return nil
 }
 
-func getReward(stakingTxStore database.StakingTxMapReply, height uint64) ([]database.Rank, error) {
+func getReward(stakingTxStore database.StakingNodes, height uint64) ([]database.Rank, error) {
 	txList := make(map[[sha256.Size]byte][]database.StakingTxInfo)
-	for rsh, value := range stakingTxStore {
-		for _, v := range value {
-			if height-v.BlkHeight >= consensus.StakingTxRewardStart {
-				txList[rsh] = append(txList[rsh], v)
+	for rsh, node := range stakingTxStore {
+		for _, m := range node {
+			for _, v := range m {
+				if height-v.BlkHeight >= consensus.StakingTxRewardStart {
+					txList[rsh] = append(txList[rsh], v)
+				}
 			}
 		}
 	}

@@ -327,7 +327,7 @@ func (db *ChainDb) processBlockBatch() error {
 			if txL.delete {
 				batch.Delete(key)
 			} else {
-				txdat := db.formatTxL(txL)
+				txdat := db.formatSTx(txL)
 				batch.Put(key, txdat)
 			}
 		}
@@ -337,7 +337,7 @@ func (db *ChainDb) processBlockBatch() error {
 			if txU.delete {
 				batch.Delete(key)
 			} else {
-				txdat := db.formatTxU(txU)
+				txdat := db.formatSTx(txU)
 				batch.Put(key, txdat)
 			}
 		}

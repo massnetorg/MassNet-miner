@@ -97,6 +97,24 @@ type stakingTxMapKey struct {
 	index       uint32
 }
 
+func mustDecodeStakingTxKey(buf []byte) (expiredHeight uint64, mapKey stakingTxMapKey) {
+	if length := len(buf); length != stakingTxKeyLength {
+		logging.CPrint(logging.FATAL, "invalid raw stakingTxKey Data", logging.LogFormat{"length": length, "data": buf})
+		panic("invalid raw stakingTxKey Data") // should not reach
+	}
+	expiredHeight = binary.LittleEndian.Uint64(buf[3:11])
+	height := binary.LittleEndian.Uint64(buf[11:19])
+	var txid wire.Hash
+	copy(txid[:], buf[19:51])
+	index := binary.LittleEndian.Uint32(buf[51:])
+	mapKey = stakingTxMapKey{
+		blockHeight: height,
+		txID:        txid,
+		index:       index,
+	}
+	return
+}
+
 func mustDecodeStakingTxMapKey(bs []byte) stakingTxMapKey {
 	if length := len(bs); length != stakingTxMapKeyLength {
 		logging.CPrint(logging.FATAL, "invalid raw stakingTxMapKey Data", logging.LogFormat{"length": length, "data": bs})
@@ -154,15 +172,6 @@ func expiredStakingTxSearchKey(expiredHeight uint64) []byte {
 	return prefix
 }
 
-//type txAddrIndex struct {
-//	addrVersion byte
-//	hash160     [ripemd160.Size]byte
-//	blkHeight   uint64
-//	txoffset    int
-//	txlen       int
-//	index       uint32
-//}
-
 func (db *ChainDb) insertStakingTx(txSha *wire.Hash, index uint32, frozenPeriod uint64, blkHeight uint64, rsh [sha256.Size]byte, value int64) (err error) {
 	var txL stakingTx
 	var mapKey = stakingTxMapKey{
@@ -215,21 +224,9 @@ func (db *ChainDb) formatTx(txu *txUpdateObj) []byte {
 	return txW[:]
 }
 
-func (db *ChainDb) formatTxL(txl *stakingTx) []byte {
-	rsh := txl.rsh
-	value := txl.value
-
-	txW := make([]byte, 40)
-	copy(txW, rsh[:])
-	binary.LittleEndian.PutUint64(txW[32:40], value)
-
-	return txW
-
-}
-
-func (db *ChainDb) formatTxU(txu *stakingTx) []byte {
-	rsh := txu.rsh
-	value := txu.value
+func (db *ChainDb) formatSTx(stx *stakingTx) []byte {
+	rsh := stx.rsh
+	value := stx.value
 
 	txW := make([]byte, 40)
 	copy(txW[:32], rsh[:])
@@ -562,14 +559,11 @@ func (db *ChainDb) FetchTxBySha(txsha *wire.Hash) ([]*database.TxReply, error) {
 //	}
 //}
 
-func (db *ChainDb) FetchExpiredStakingTxListByHeight(expiredHeight uint64) (database.StakingTxMapReply, error) {
+func (db *ChainDb) FetchExpiredStakingTxListByHeight(expiredHeight uint64) (database.StakingNodes, error) {
 
-	txList := make(database.StakingTxMapReply)
-	//var scriptHash [sha256.Size]byte
+	nodes := make(database.StakingNodes)
 
 	searchKey := expiredStakingTxSearchKey(expiredHeight)
-	//copy(searchKey, recordExpiredStakingTx[:])
-	//binary.LittleEndian.PutUint64(searchKey[len(recordExpiredStakingTx):], height)
 
 	iter := db.stor.NewIterator(storage.BytesPrefix(searchKey))
 	defer iter.Release()
@@ -578,41 +572,36 @@ func (db *ChainDb) FetchExpiredStakingTxListByHeight(expiredHeight uint64) (data
 		// key
 		key := iter.Key()
 		mapKey := mustDecodeStakingTxMapKey(key[11:])
-		//expiredHeight := binary.LittleEndian.Uint64(key[len(recordExpiredStakingTx) : len(recordExpiredStakingTx)+8])
-		//var txhash wire.Hash
-		//copy(txhash[:], key[len(recordExpiredStakingTx)+8:len(recordExpiredStakingTx)+40])
-		//index := binary.LittleEndian.Uint32(key[len(recordExpiredStakingTx)+40:])
-		outPoint := wire.OutPoint{Hash: mapKey.txID, Index: mapKey.index}
 		blockHeight := mapKey.blockHeight
+		outPoint := wire.OutPoint{
+			Hash:  mapKey.txID,
+			Index: mapKey.index,
+		}
 
-		// value
+		// data
 		data := iter.Value()
 		scriptHash, value := mustDecodeStakingTxValue(data)
-		//copy(scriptHash[:], value[:32])
-		//amount := binary.LittleEndian.Uint64(value[32:40])
-		//blkHeight := binary.LittleEndian.Uint64(value[40:48])
 
-		//map1 := make(map[wire.OutPoint]database.StakingTxInfo)
-		//map1[outPoint] = database.StakingTxInfo{amount, expiredHeight - blkHeight, blkHeight}
-		_, ok := txList[scriptHash]
-		if !ok {
-			map1 := make(map[wire.OutPoint]database.StakingTxInfo)
-			map1[outPoint] = database.StakingTxInfo{Value: uint64(value), FrozenPeriod: expiredHeight - blockHeight, BlkHeight: blockHeight}
-			txList[scriptHash] = map1
-		} else {
-			txList[scriptHash][outPoint] = database.StakingTxInfo{Value: uint64(value), FrozenPeriod: expiredHeight - blockHeight, BlkHeight: blockHeight}
+		stakingInfo := database.StakingTxInfo{
+			Value:        value,
+			FrozenPeriod: expiredHeight - blockHeight,
+			BlkHeight:    blockHeight,
+		}
+
+		if !nodes.Get(scriptHash).Put(outPoint, stakingInfo) {
+			return nil, ErrCheckStakingDuplicated
 		}
 	}
 	if err := iter.Error(); err != nil {
-		return database.StakingTxMapReply{}, err
+		return nil, err
 	}
 
-	return txList, nil
+	return nodes, nil
 }
 
-func (db *ChainDb) FetchStakingTxMap() (database.StakingTxMapReply, error) {
+func (db *ChainDb) FetchStakingTxMap() (database.StakingNodes, error) {
 
-	txList := make(database.StakingTxMapReply)
+	nodes := make(database.StakingNodes)
 
 	iter := db.stor.NewIterator(storage.BytesPrefix(recordStakingTx))
 	defer iter.Release()
@@ -621,30 +610,33 @@ func (db *ChainDb) FetchStakingTxMap() (database.StakingTxMapReply, error) {
 
 		// key
 		key := iter.Key()
-		expiredHeight := binary.LittleEndian.Uint64(key[len(recordStakingTx) : len(recordStakingTx)+8])
-		mapKey := mustDecodeStakingTxMapKey(key[len(recordStakingTx)+8:])
+		expiredHeight, mapKey := mustDecodeStakingTxKey(key)
 		blkHeight := mapKey.blockHeight
-		outPoint := wire.OutPoint{Hash: mapKey.txID, Index: mapKey.index}
+		outPoint := wire.OutPoint{
+			Hash:  mapKey.txID,
+			Index: mapKey.index,
+		}
 
-		// value
-		value := iter.Value()
-		scriptHash, amount := mustDecodeStakingTxValue(value)
+		// data
+		data := iter.Value()
+		scriptHash, value := mustDecodeStakingTxValue(data)
 
-		_, ok := txList[scriptHash]
-		if !ok {
-			map1 := make(map[wire.OutPoint]database.StakingTxInfo)
-			map1[outPoint] = database.StakingTxInfo{Value: amount, FrozenPeriod: expiredHeight - blkHeight, BlkHeight: blkHeight}
-			txList[scriptHash] = map1
-		} else {
-			txList[scriptHash][outPoint] = database.StakingTxInfo{Value: amount, FrozenPeriod: expiredHeight - blkHeight, BlkHeight: blkHeight}
+		stakingInfo := database.StakingTxInfo{
+			Value:        value,
+			FrozenPeriod: expiredHeight - blkHeight,
+			BlkHeight:    blkHeight,
+		}
+
+		if !nodes.Get(scriptHash).Put(outPoint, stakingInfo) {
+			return nil, ErrCheckStakingDuplicated
 		}
 	}
 
 	if err := iter.Error(); err != nil {
-		return database.StakingTxMapReply{}, err
+		return nil, err
 	}
 
-	return txList, nil
+	return nodes, nil
 }
 
 func (db *ChainDb) fetchInStakingTx(nowHeight uint64) (map[[sha256.Size]byte][]database.StakingTxInfo, error) {

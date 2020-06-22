@@ -263,19 +263,17 @@ func (db *ChainDb) deleteAddrIndex(height uint64) error {
 
 	iter := db.stor.NewIterator(storage.BytesPrefix(shPrefix))
 	defer iter.Release()
-	// TODO: batch delete threshold?
 	for iter.Next() {
-		//scriptHash := make([]byte, ripemd160.Size, ripemd160.Size)
 		var scriptHash [sha256.Size]byte
 		shIndexKey := iter.Key()
 		copy(scriptHash[:], shIndexKey[11:])
 		deletePrefix := txIndexDeleteKey(scriptHash, height)
 		txIter := db.stor.NewIterator(storage.BytesPrefix(deletePrefix))
-		defer txIter.Release()
 		for txIter.Next() {
 			txIndexKey := txIter.Key()
 			batch.Delete(txIndexKey)
 		}
+		txIter.Release()
 		if err := txIter.Error(); err != nil {
 			return err
 		}
@@ -296,11 +294,11 @@ func (db *ChainDb) deleteAddrIndex(height uint64) error {
 		copy(scriptHash[:], shIndexKey[bindingShIndexSearchKeyLen:])
 		deletePrefix := bindingTxIndexDeleteKey(scriptHash, height)
 		deleteGtxIter := db.stor.NewIterator(storage.BytesPrefix(deletePrefix))
-		defer deleteGtxIter.Release()
 		for deleteGtxIter.Next() {
 			btxIndexKey := deleteGtxIter.Key()
 			batch.Delete(btxIndexKey)
 		}
+		deleteGtxIter.Release()
 		if err := deleteGtxIter.Error(); err != nil {
 			return err
 		}
@@ -338,6 +336,7 @@ func (db *ChainDb) deleteAddrIndex(height uint64) error {
 		}
 		bindingShIndexKey := bindingShIndexToKey(bindingShIndex)
 		batch.Put(bindingShIndexKey, blankData)
+		batch.Delete(btxsKey)
 	}
 	if err := btxsIter.Error(); err != nil {
 		return err
@@ -361,7 +360,6 @@ func (db *ChainDb) FetchScriptHashRelatedTx(scriptHashes [][]byte, startBlock, s
 		end := txIndexSearchKey(scriptHash, stopBlock)
 		// interval [startBlock, stopBlock) stopBlock not include
 		iter := db.stor.NewIterator(&storage.Range{Start: start, Limit: end})
-		defer iter.Release()
 		for iter.Next() {
 			key := iter.Key()
 			var txLoc [16]byte
@@ -370,6 +368,7 @@ func (db *ChainDb) FetchScriptHashRelatedTx(scriptHashes [][]byte, startBlock, s
 				allTx[txLoc] = struct{}{}
 			}
 		}
+		iter.Release()
 
 		if err := iter.Error(); err != nil {
 			return nil, err

@@ -78,6 +78,7 @@ var (
 	ErrStakingRewardNum      = errors.New("incorrect staking reward number")
 	ErrBindingPubKey         = errors.New("binding pubkey does not match miner pubkey")
 	ErrBindingInputMissing   = errors.New("input of binding missing")
+	ErrDuplicateStaking      = errors.New("duplicate staking")
 
 	// TxIn
 	ErrFindReferenceInput = errors.New("unable find reference transaction ")

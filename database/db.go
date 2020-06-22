@@ -133,9 +133,9 @@ type Db interface {
 	FetchInStakingTx(height uint64) ([]Reward, uint32, error)
 
 	// fetch a map of all staking transactions in database
-	FetchStakingTxMap() (StakingTxMapReply, error)
+	FetchStakingTxMap() (StakingNodes, error)
 
-	FetchExpiredStakingTxListByHeight(height uint64) (StakingTxMapReply, error)
+	FetchExpiredStakingTxListByHeight(height uint64) (StakingNodes, error)
 
 	FetchHeightRange(startHeight, endHeight uint64) ([]wire.Hash, error)
 
@@ -292,8 +292,60 @@ type BindingTxReply struct {
 	Index      uint32
 }
 
-// stakingTx
-type StakingTxMapReply map[[sha256.Size]byte]map[wire.OutPoint]StakingTxInfo
+type StakingTxOutAtHeight map[uint64]map[wire.OutPoint]StakingTxInfo
+
+// Returns false if already exists
+func (sh StakingTxOutAtHeight) Put(op wire.OutPoint, stk StakingTxInfo) (success bool) {
+	m, ok := sh[stk.BlkHeight]
+	if !ok {
+		m = make(map[wire.OutPoint]StakingTxInfo)
+		sh[stk.BlkHeight] = m
+	}
+	if _, exist := m[op]; exist {
+		return false
+	}
+	m[op] = stk
+	return true
+}
+
+type StakingNodes map[[sha256.Size]byte]StakingTxOutAtHeight
+
+func (nodes StakingNodes) Get(key [sha256.Size]byte) StakingTxOutAtHeight {
+	m, ok := nodes[key]
+	if !ok {
+		m = make(StakingTxOutAtHeight)
+		nodes[key] = m
+	}
+	return m
+}
+
+func (nodes StakingNodes) IsEmpty(key [sha256.Size]byte) bool {
+	for _, v := range nodes[key] {
+		if len(v) > 0 {
+			return false
+		}
+	}
+	return true
+}
+
+func (nodes StakingNodes) Delete(key [sha256.Size]byte, blkHeight uint64, op wire.OutPoint) bool {
+	m1, ok := nodes[key]
+	if !ok {
+		return false
+	}
+
+	m2, ok := m1[blkHeight]
+	if !ok {
+		return false
+	}
+
+	_, ok = m2[op]
+	if !ok {
+		return false
+	}
+	delete(m2, op)
+	return true
+}
 
 // BlockAddrIndex represents the indexing structure for addresses.
 // It maps a hash160 to a list of transaction locations within a block that
