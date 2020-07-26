@@ -140,6 +140,9 @@ func (db *ChainDb) getFaultPkShasByHeight(blkHeight uint64) ([]*wire.Hash, error
 	index := faultPkHeightToKey(blkHeight)
 	data, err := db.stor.Get(index)
 	if err != nil {
+		if err == storage.ErrNotFound {
+			return nil, nil
+		}
 		logging.CPrint(logging.TRACE, "failed to find faultPk list on block height", logging.LogFormat{"height": blkHeight})
 		return nil, err
 	}
@@ -178,6 +181,7 @@ func (db *ChainDb) getFaultPkData(sha *wire.Hash) (uint64, []byte, error) {
 
 // insertFaultPks - insert newly banned faultPk list on specific height
 // Must be called with db lock held.
+// DEPRECATED since version 1.1.0
 func insertFaultPks(batch storage.Batch, blkHeight uint64, faultPks []*wire.FaultPubKey) error {
 	count := len(faultPks)
 	var b2 [2]byte
@@ -195,8 +199,11 @@ func insertFaultPks(batch storage.Batch, blkHeight uint64, faultPks []*wire.Faul
 		}
 	}
 
-	heightIndex := faultPkHeightToKey(uint64(blkHeight))
-	return batch.Put(heightIndex, shaListData.Bytes())
+	if count > 0 {
+		heightIndex := faultPkHeightToKey(uint64(blkHeight))
+		return batch.Put(heightIndex, shaListData.Bytes())
+	}
+	return nil
 }
 
 // insertFaultPk - insert newly banned faultPk on specific height
@@ -230,8 +237,11 @@ func (db *ChainDb) dropFaultPksByHeight(batch storage.Batch, blkHeight uint64) e
 			return err
 		}
 	}
-	index := faultPkHeightToKey(blkHeight)
-	return batch.Delete(index)
+	if len(shaList) > 0 {
+		index := faultPkHeightToKey(blkHeight)
+		return batch.Delete(index)
+	}
+	return nil
 }
 
 func dropFaultPkBySha(batch storage.Batch, sha *wire.Hash) error {

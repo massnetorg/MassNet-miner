@@ -5,16 +5,18 @@ import (
 	"encoding/binary"
 	"math"
 
-	"github.com/golang/protobuf/proto"
-	"massnet.org/mass/database"
 	"massnet.org/mass/database/storage"
 	"massnet.org/mass/debug"
 	"massnet.org/mass/errors"
 	"massnet.org/mass/logging"
-	"massnet.org/mass/massutil"
 	"massnet.org/mass/txscript"
-	"massnet.org/mass/wire"
 	wirepb "massnet.org/mass/wire/pb"
+
+	"github.com/golang/protobuf/proto"
+
+	"massnet.org/mass/database"
+	"massnet.org/mass/massutil"
+	"massnet.org/mass/wire"
 )
 
 var (
@@ -67,9 +69,15 @@ func (db *ChainDb) submitBlock(block *massutil.Block) (err error) {
 	batch := db.Batch(blockBatch).Batch()
 	blockHash := block.Hash()
 
-	rawMsg, txLoc, err := wire.SerializeBlockWithModeDB(block.MsgBlock())
+	rawMsg, err := block.MsgBlock().Bytes(wire.DB)
 	if err != nil {
 		logging.CPrint(logging.ERROR, "failed to serialize block", logging.LogFormat{"block": blockHash, "err": err})
+		return err
+	}
+	block.SetSerializedBlockDB(rawMsg)
+	txLocs, err := block.TxLoc()
+	if err != nil {
+		logging.CPrint(logging.ERROR, "failed to get txloc", logging.LogFormat{"block": blockHash, "err": err})
 		return err
 	}
 	// save raw block to disk
@@ -143,7 +151,7 @@ func (db *ChainDb) submitBlock(block *massutil.Block) (err error) {
 			}
 		}
 
-		err = db.insertTx(tx.Hash(), block.Height(), txLoc[txidx].TxStart, txLoc[txidx].TxLen, spentbuf)
+		err = db.insertTx(tx.Hash(), block.Height(), txLocs[txidx].TxStart, txLocs[txidx].TxLen, spentbuf)
 		if err != nil {
 			logging.CPrint(logging.WARN, "failed to insert tx",
 				logging.LogFormat{"block": blockHash, "height": block.Height(), "tx": tx.Hash(), "err": err})
@@ -337,7 +345,7 @@ func (db *ChainDb) processBlockBatch() error {
 			if txL.delete {
 				batch.Delete(key)
 			} else {
-				txdat := db.formatTxL(txL)
+				txdat := db.formatSTx(txL)
 				batch.Put(key, txdat)
 			}
 		}
@@ -347,7 +355,7 @@ func (db *ChainDb) processBlockBatch() error {
 			if txU.delete {
 				batch.Delete(key)
 			} else {
-				txdat := db.formatTxU(txU)
+				txdat := db.formatSTx(txU)
 				batch.Put(key, txdat)
 			}
 		}
@@ -562,6 +570,20 @@ func (db *ChainDb) blkExistsSha(sha *wire.Hash) (bool, error) {
 func (db *ChainDb) FetchBlockShaByHeight(height uint64) (sha *wire.Hash, err error) {
 
 	return db.fetchBlockShaByHeight(height)
+}
+
+func (db *ChainDb) FetchBlockLocByHeight(height uint64) (*database.BlockLoc, error) {
+	blkHash, fileNo, offset, len, err := db.getBlkLocByHeight(height)
+	if err != nil {
+		return nil, err
+	}
+	return &database.BlockLoc{
+		Height: height,
+		Hash:   *blkHash,
+		File:   fileNo,
+		Offset: uint64(offset),
+		Length: uint64(len),
+	}, nil
 }
 
 // fetchBlockShaByHeight returns a block hash based on its height in the

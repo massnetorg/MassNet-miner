@@ -110,17 +110,18 @@ func insertBlockPunishments(batch storage.Batch, blk *massutil.Block) error {
 		if err != nil {
 			return err
 		}
+
+		// table - PUNISH
+		key := punishmentPubKeyToKey(fpk.PubKey)
+		batch.Delete(key)
 	}
 
 	// table - BANHGT
-	heightIndex := faultPkHeightToKey(blk.Height())
-	if err := batch.Put(heightIndex, shaListData.Bytes()); err != nil {
-		return err
-	}
-	// table - PUNISH
-	for _, pk := range faultPks {
-		key := punishmentPubKeyToKey(pk.PubKey)
-		batch.Delete(key)
+	if len(faultPks) > 0 {
+		heightIndex := faultPkHeightToKey(blk.Height())
+		if err := batch.Put(heightIndex, shaListData.Bytes()); err != nil {
+			return err
+		}
 	}
 	return nil
 }

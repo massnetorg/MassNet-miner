@@ -412,17 +412,21 @@ func (chain *Blockchain) BlockWaiter(height uint64) (<-chan *BlockNode, error) {
 }
 
 func (chain *Blockchain) RegisterListener(listener Listener) {
-	chain.l.Lock()
-	defer chain.l.Unlock()
-
-	chain.listeners[listener] = struct{}{}
+	newListeners := make(map[Listener]struct{})
+	for l, v := range chain.listeners {
+		newListeners[l] = v
+	}
+	newListeners[listener] = struct{}{}
+	chain.listeners = newListeners
 }
 
 func (chain *Blockchain) UnregisterListener(listener Listener) {
-	chain.l.Lock()
-	defer chain.l.Unlock()
-
-	delete(chain.listeners, listener)
+	newListeners := make(map[Listener]struct{})
+	for l, v := range chain.listeners {
+		newListeners[l] = v
+	}
+	delete(newListeners, listener)
+	chain.listeners = newListeners
 }
 
 func (chain *Blockchain) notifyBlockConnected(block *massutil.Block) error {
@@ -455,12 +459,17 @@ func (chain *Blockchain) CurrentIndexHeight() uint64 {
 	return chain.blockTree.bestBlockNode().Height
 }
 
-func (chain *Blockchain) GetRewardStakingTx(height uint64) ([]database.Reward, uint32, error) {
-	return chain.db.FetchRewardStakingTx(height)
+// GetBlockStakingRewardRankOnList returns staking reward list at any height.
+func (chain *Blockchain) GetBlockStakingRewardRankOnList(height uint64) ([]database.Rank, error) {
+	if height == chain.BestBlockHeight() {
+		return chain.db.FetchUnexpiredStakingRank(height, true)
+	}
+	return chain.db.FetchStakingRank(height, true)
 }
 
-func (chain *Blockchain) GetInStakingTx(height uint64) ([]database.Reward, uint32, error) {
-	return chain.db.FetchInStakingTx(height)
+// GetUnexpiredStakingRank returns all the unexpired staking rank.
+func (chain *Blockchain) GetUnexpiredStakingRank(height uint64) ([]database.Rank, error) {
+	return chain.db.FetchUnexpiredStakingRank(height, false)
 }
 
 func (chain *Blockchain) FetchScriptHashRelatedBindingTx(scriptHash []byte, chainParams *config.Params) ([]*database.BindingTxReply, error) {

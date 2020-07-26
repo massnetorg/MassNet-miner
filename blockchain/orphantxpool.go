@@ -106,7 +106,7 @@ func (otp *OrphanTxPool) addOrphan(tx *massutil.Tx) {
 func (otp *OrphanTxPool) maybeAddOrphan(tx *massutil.Tx) error {
 	serializedLen := tx.MsgTx().PlainSize()
 	if serializedLen > maxOrphanTxSize {
-		logging.CPrint(logging.ERROR, "orphan transaction size is larger than max allowed size",
+		logging.CPrint(logging.WARN, "orphan transaction is larger than maximum allowed",
 			logging.LogFormat{"txSize": serializedLen, "maxOrphanTxSize": maxOrphanTxSize})
 		return ErrTxTooBig
 	}

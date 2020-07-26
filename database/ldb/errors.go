@@ -3,8 +3,10 @@ package ldb
 import "massnet.org/mass/errors"
 
 var (
-	ErrWrongScriptHashLength = errors.New("length of script hash error")
-	ErrBindingIndexBroken    = errors.New("binding transaction index was broken")
+	ErrWrongScriptHashLength  = errors.New("length of script hash error")
+	ErrBindingIndexBroken     = errors.New("binding transaction index was broken")
+	ErrIncorrectDbData        = errors.New("incorrect db data")
+	ErrCheckStakingDuplicated = errors.New("duplicated staking")
 
 	// errors for submit.go
 	ErrPreBatchNotReady    = errors.New("previous batch is not ready")

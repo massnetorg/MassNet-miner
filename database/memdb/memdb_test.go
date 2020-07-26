@@ -138,7 +138,7 @@ func TestMemDb(t *testing.T) {
 	assert.Nil(t, fpk)
 
 	fpks, err := db.FetchFaultPkListByHeight(0)
-	assert.Equal(t, storage.ErrNotFound, err)
+	assert.Nil(t, err)
 	assert.Equal(t, 0, len(fpks))
 
 	exists, err := db.ExistsFaultPk(&wire.Hash{})

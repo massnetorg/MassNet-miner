@@ -6,7 +6,6 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
-	"massnet.org/mass/config"
 	"massnet.org/mass/database"
 	"massnet.org/mass/database/ldb"
 	"massnet.org/mass/massutil"
@@ -168,7 +167,7 @@ func TestAddrIndexer(t *testing.T) {
 	}
 
 	// before indexing block 21
-	mp, err := bc.db.FetchScriptHashRelatedTx(notPresentBefore21, 0, 21, &config.ChainParams)
+	mp, err := bc.db.FetchScriptHashRelatedTx(notPresentBefore21, 0, 21)
 	assert.Nil(t, err)
 	assert.Zero(t, len(mp))
 
@@ -186,7 +185,7 @@ func TestAddrIndexer(t *testing.T) {
 	assert.Nil(t, err)
 
 	// after indexing block 21
-	mp, err = bc.db.FetchScriptHashRelatedTx(notPresentBefore21, 0, 22, &config.ChainParams)
+	mp, err = bc.db.FetchScriptHashRelatedTx(notPresentBefore21, 0, 22)
 	assert.Nil(t, err)
 	assert.Equal(t, 1, len(mp))
 	// assert.Equal(t, 3, len(mp[21]))

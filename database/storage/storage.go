@@ -11,16 +11,24 @@ import (
 )
 
 const (
+	// StorageV1
+	//		- initial
+	StorageV1 int32 = 1 + iota
+	// StorageV2
+	//		- record bitlength associated with poc pk
+	StorageV2
+	// StorageV3
+	//		- since 1.1.0
+	//		- save blocks to disk
+	StorageV3
+
+	CurrentStorageVersion int32 = StorageV3
+)
+
+const (
 	KiB = 1024
 	MiB = KiB * 1024
 	GiB = MiB * 1024
-
-	// Current storage version.
-	// CHANGELOG:
-	//    v1 - init
-	//    v2 - add 		record bitlength of each poc pk
-	//    v3 - change	save blocks to disk
-	CurrentStorageVersion int32 = 3
 )
 
 var (

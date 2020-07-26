@@ -2,52 +2,15 @@ package ldb
 
 import (
 	"bytes"
-	"crypto/sha256"
 	"encoding/binary"
 	"fmt"
 	"math"
 
-	"massnet.org/mass/consensus"
 	"massnet.org/mass/database"
 	"massnet.org/mass/database/storage"
 	"massnet.org/mass/debug"
 	"massnet.org/mass/logging"
 	"massnet.org/mass/wire"
-)
-
-const (
-	// Each stakingTx/expiredStakingTx key is 55 bytes:
-	// ----------------------------------------------------------------
-	// |  Prefix | expiredHeight | blockHeight |   TxID   | TxOutIndex |
-	// ----------------------------------------------------------------
-	// | 3 bytes |    8 bytes   |   8 bytes  | 32 bytes |   4 bytes   |
-	// ----------------------------------------------------------------
-	stakingTxKeyLength = 55
-
-	// Each stakingTx/expiredStakingTx value is 40 bytes:
-	// -----------------------
-	// | ScriptHash | Value  |
-	// -----------------------
-	// |  32 bytes  | 8 byte |
-	// -----------------------
-
-	stakingTxValueLength = 40
-
-	// Each stakingTx/expiredStakingTx search key is 11 bytes:
-	// ----------------------------
-	// |   Prefix  | expiredHeight |
-	// ----------------------------
-	// |  3 bytes  |    8 byte    |
-	// ----------------------------
-	stakingTxSearchKeyLength = 11
-
-	// Each stakingTx/expiredStakingTx value is 44 bytes:
-	// ---------------------------------------
-	// | blockHeight |   TxID   | TxOutIndex |
-	// ---------------------------------------
-	// |   8 bytes  | 32 bytes |    4 byte  |
-	// ---------------------------------------
-	stakingTxMapKeyLength = 44
 )
 
 type txUpdateObj struct {
@@ -71,118 +34,6 @@ type spentTx struct {
 type spentTxUpdate struct {
 	txl    []*spentTx
 	delete bool
-}
-
-type stakingTx struct {
-	txSha         *wire.Hash
-	index         uint32
-	expiredHeight uint64
-	rsh           [sha256.Size]byte
-	value         uint64
-	blkHeight     uint64
-	delete        bool
-}
-
-func mustDecodeStakingTxValue(bs []byte) (scriptHash [sha256.Size]byte, value uint64) {
-	if length := len(bs); length != stakingTxValueLength {
-		logging.CPrint(logging.FATAL, "invalid raw StakingTxVale Data", logging.LogFormat{"length": length, "data": bs})
-		panic("invalid raw StakingTxVale Data") // should not reach
-	}
-	copy(scriptHash[:], bs[:32])
-	value = binary.LittleEndian.Uint64(bs[32:40])
-	return
-}
-
-type stakingTxMapKey struct {
-	blockHeight uint64
-	txID        wire.Hash
-	index       uint32
-}
-
-func mustDecodeStakingTxMapKey(bs []byte) stakingTxMapKey {
-	if length := len(bs); length != stakingTxMapKeyLength {
-		logging.CPrint(logging.FATAL, "invalid raw stakingTxMapKey Data", logging.LogFormat{"length": length, "data": bs})
-		panic("invalid raw stakingTxMapKey Data") // should not reach
-	}
-	height := binary.LittleEndian.Uint64(bs[:8])
-	var txid wire.Hash
-	copy(txid[:], bs[8:40])
-	return stakingTxMapKey{
-		blockHeight: height,
-		txID:        txid,
-		index:       binary.LittleEndian.Uint32(bs[40:]),
-	}
-}
-
-func mustEncodeStakingTxMapKey(mapKey stakingTxMapKey) []byte {
-	var key [stakingTxMapKeyLength]byte
-	binary.LittleEndian.PutUint64(key[:8], mapKey.blockHeight)
-	copy(key[8:40], mapKey.txID[:])
-	binary.LittleEndian.PutUint32(key[40:44], mapKey.index)
-	return key[:]
-}
-
-func heightStakingTxToKey(expiredHeight uint64, mapKey stakingTxMapKey) []byte {
-	mapKeyData := mustEncodeStakingTxMapKey(mapKey)
-	key := make([]byte, stakingTxKeyLength)
-
-	copy(key[:len(recordStakingTx)], recordStakingTx)
-	binary.LittleEndian.PutUint64(key[len(recordStakingTx):len(recordStakingTx)+8], expiredHeight)
-	copy(key[len(recordStakingTx)+8:], mapKeyData)
-	return key
-}
-
-func heightExpiredStakingTxToKey(expiredHeight uint64, mapKey stakingTxMapKey) []byte {
-	mapKeyData := mustEncodeStakingTxMapKey(mapKey)
-	key := make([]byte, stakingTxKeyLength)
-
-	copy(key[:len(recordExpiredStakingTx)], recordExpiredStakingTx)
-	binary.LittleEndian.PutUint64(key[len(recordExpiredStakingTx):len(recordExpiredStakingTx)+8], expiredHeight)
-	copy(key[len(recordExpiredStakingTx)+8:], mapKeyData)
-	return key
-}
-
-func stakingTxSearchKey(expiredHeight uint64) []byte {
-	prefix := make([]byte, stakingTxSearchKeyLength)
-	copy(prefix[:len(recordStakingTx)], recordStakingTx)
-	binary.LittleEndian.PutUint64(prefix[len(recordStakingTx):stakingTxSearchKeyLength], expiredHeight)
-	return prefix
-}
-
-func expiredStakingTxSearchKey(expiredHeight uint64) []byte {
-	prefix := make([]byte, stakingTxSearchKeyLength)
-	copy(prefix[:len(recordExpiredStakingTx)], recordExpiredStakingTx)
-	binary.LittleEndian.PutUint64(prefix[len(recordExpiredStakingTx):stakingTxSearchKeyLength], expiredHeight)
-	return prefix
-}
-
-//type txAddrIndex struct {
-//	addrVersion byte
-//	hash160     [ripemd160.Size]byte
-//	blkHeight   uint64
-//	txoffset    int
-//	txlen       int
-//	index       uint32
-//}
-
-func (db *ChainDb) insertStakingTx(txSha *wire.Hash, index uint32, frozenPeriod uint64, blkHeight uint64, rsh [sha256.Size]byte, value int64) (err error) {
-	var txL stakingTx
-	var mapKey = stakingTxMapKey{
-		blockHeight: blkHeight,
-		txID:        *txSha,
-		index:       index,
-	}
-
-	txL.txSha = txSha
-	txL.index = index
-	txL.expiredHeight = frozenPeriod + blkHeight
-	txL.rsh = rsh
-	txL.value = uint64(value)
-	txL.blkHeight = blkHeight
-	logging.CPrint(logging.DEBUG, "insertStakingTx in the height", logging.LogFormat{"startHeight": blkHeight, "expiredHeight": txL.expiredHeight})
-	db.stakingTxMap[mapKey] = &txL
-
-	return nil
 }
 
 // insertTx inserts a tx hash and its associated data into the database.
@@ -215,30 +66,6 @@ func (db *ChainDb) formatTx(txu *txUpdateObj) []byte {
 	copy(txW[16:], spentbuf)
 
 	return txW[:]
-}
-
-func (db *ChainDb) formatTxL(txl *stakingTx) []byte {
-	rsh := txl.rsh
-	value := txl.value
-
-	txW := make([]byte, 40)
-	copy(txW, rsh[:])
-	binary.LittleEndian.PutUint64(txW[32:40], value)
-
-	return txW
-
-}
-
-func (db *ChainDb) formatTxU(txu *stakingTx) []byte {
-	rsh := txu.rsh
-	value := txu.value
-
-	txW := make([]byte, 40)
-	copy(txW[:32], rsh[:])
-	binary.LittleEndian.PutUint64(txW[32:40], value)
-
-	return txW
-
 }
 
 func (db *ChainDb) getTxData(txsha *wire.Hash) (uint64, int, int, []byte, error) {
@@ -490,6 +317,29 @@ func (db *ChainDb) FetchTxByLoc(blkHeight uint64, txOff int, txLen int) (*wire.M
 	return msgtx, nil
 }
 
+func (db *ChainDb) FetchTxByFileLoc(blkLoc *database.BlockLoc, txLoc *wire.TxLoc) (*wire.MsgTx, error) {
+	buf, err := db.blkFileKeeper.ReadRawTx(blkLoc.File, int64(blkLoc.Offset), int64(txLoc.TxStart), txLoc.TxLen)
+	if err != nil {
+		return nil, err
+	}
+
+	var tx wire.MsgTx
+	err = tx.SetBytes(buf, wire.DB)
+	if err != nil {
+		logging.CPrint(logging.WARN, "unable to decode tx",
+			logging.LogFormat{
+				"err":     err,
+				"blkfile": blkLoc.File,
+				"blkoff":  blkLoc.Offset,
+				"blklen":  blkLoc.Length,
+				"txoff":   txLoc.TxStart,
+				"txlen":   txLoc.TxLen,
+			})
+		return nil, err
+	}
+	return &tx, nil
+}
+
 // FetchTxBySha returns some data for the given Tx Sha.
 // Be careful, main chain may be revoked during invocation.
 func (db *ChainDb) FetchTxBySha(txsha *wire.Hash) ([]*database.TxReply, error) {
@@ -573,185 +423,3 @@ func (db *ChainDb) FetchTxBySha(txsha *wire.Hash) ([]*database.TxReply, error) {
 //		index:     binary.LittleEndian.Uint32(rawIndex[16:20]),
 //	}
 //}
-
-func (db *ChainDb) FetchExpiredStakingTxListByHeight(expiredHeight uint64) (database.StakingTxMapReply, error) {
-
-	txList := make(database.StakingTxMapReply)
-	//var scriptHash [sha256.Size]byte
-
-	searchKey := expiredStakingTxSearchKey(expiredHeight)
-	//copy(searchKey, recordExpiredStakingTx[:])
-	//binary.LittleEndian.PutUint64(searchKey[len(recordExpiredStakingTx):], height)
-
-	iter := db.stor.NewIterator(storage.BytesPrefix(searchKey))
-	defer iter.Release()
-
-	for iter.Next() {
-		// key
-		key := iter.Key()
-		mapKey := mustDecodeStakingTxMapKey(key[11:])
-		//expiredHeight := binary.LittleEndian.Uint64(key[len(recordExpiredStakingTx) : len(recordExpiredStakingTx)+8])
-		//var txhash wire.Hash
-		//copy(txhash[:], key[len(recordExpiredStakingTx)+8:len(recordExpiredStakingTx)+40])
-		//index := binary.LittleEndian.Uint32(key[len(recordExpiredStakingTx)+40:])
-		outPoint := wire.OutPoint{Hash: mapKey.txID, Index: mapKey.index}
-		blockHeight := mapKey.blockHeight
-
-		// value
-		data := iter.Value()
-		scriptHash, value := mustDecodeStakingTxValue(data)
-		//copy(scriptHash[:], value[:32])
-		//amount := binary.LittleEndian.Uint64(value[32:40])
-		//blkHeight := binary.LittleEndian.Uint64(value[40:48])
-
-		//map1 := make(map[wire.OutPoint]database.StakingTxInfo)
-		//map1[outPoint] = database.StakingTxInfo{amount, expiredHeight - blkHeight, blkHeight}
-		_, ok := txList[scriptHash]
-		if !ok {
-			map1 := make(map[wire.OutPoint]database.StakingTxInfo)
-			map1[outPoint] = database.StakingTxInfo{Value: uint64(value), FrozenPeriod: expiredHeight - blockHeight, BlkHeight: blockHeight}
-			txList[scriptHash] = map1
-		} else {
-			txList[scriptHash][outPoint] = database.StakingTxInfo{Value: uint64(value), FrozenPeriod: expiredHeight - blockHeight, BlkHeight: blockHeight}
-		}
-	}
-	if err := iter.Error(); err != nil {
-		return database.StakingTxMapReply{}, err
-	}
-
-	return txList, nil
-}
-
-func (db *ChainDb) FetchStakingTxMap() (database.StakingTxMapReply, error) {
-
-	txList := make(database.StakingTxMapReply)
-
-	iter := db.stor.NewIterator(storage.BytesPrefix(recordStakingTx))
-	defer iter.Release()
-
-	for iter.Next() {
-
-		// key
-		key := iter.Key()
-		expiredHeight := binary.LittleEndian.Uint64(key[len(recordStakingTx) : len(recordStakingTx)+8])
-		mapKey := mustDecodeStakingTxMapKey(key[len(recordStakingTx)+8:])
-		blkHeight := mapKey.blockHeight
-		outPoint := wire.OutPoint{Hash: mapKey.txID, Index: mapKey.index}
-
-		// value
-		value := iter.Value()
-		scriptHash, amount := mustDecodeStakingTxValue(value)
-
-		_, ok := txList[scriptHash]
-		if !ok {
-			map1 := make(map[wire.OutPoint]database.StakingTxInfo)
-			map1[outPoint] = database.StakingTxInfo{Value: amount, FrozenPeriod: expiredHeight - blkHeight, BlkHeight: blkHeight}
-			txList[scriptHash] = map1
-		} else {
-			txList[scriptHash][outPoint] = database.StakingTxInfo{Value: amount, FrozenPeriod: expiredHeight - blkHeight, BlkHeight: blkHeight}
-		}
-	}
-
-	if err := iter.Error(); err != nil {
-		return database.StakingTxMapReply{}, err
-	}
-
-	return txList, nil
-}
-
-func (db *ChainDb) fetchInStakingTx(nowHeight uint64) (map[[sha256.Size]byte][]database.StakingTxInfo, error) {
-
-	stakingTxInfos := make(map[[sha256.Size]byte][]database.StakingTxInfo)
-
-	iter := db.stor.NewIterator(storage.BytesPrefix(recordStakingTx))
-	defer iter.Release()
-
-	i := 0
-	for iter.Next() {
-		i++
-		key := iter.Key()
-		expiredHeight := binary.LittleEndian.Uint64(key[len(recordStakingTx) : len(recordStakingTx)+8])
-		mapKey := mustDecodeStakingTxMapKey(key[len(recordStakingTx)+8:])
-		blkHeight := mapKey.blockHeight
-
-		value := iter.Value()
-		scriptHash, amount := mustDecodeStakingTxValue(value)
-
-		if nowHeight-blkHeight >= consensus.StakingTxRewardStart {
-			stakingTxInfos[scriptHash] = append(stakingTxInfos[scriptHash], database.StakingTxInfo{
-				Value:        amount,
-				FrozenPeriod: expiredHeight - blkHeight,
-				BlkHeight:    blkHeight})
-		}
-	}
-	logging.CPrint(logging.DEBUG, "count of inStaking tx", logging.LogFormat{"number": i})
-	if err := iter.Error(); err != nil {
-		return nil, err
-	}
-
-	return stakingTxInfos, nil
-}
-
-func (db *ChainDb) FetchRankStakingTx(height uint64) ([]database.Rank, error) {
-
-	stakingTxInfos, err := db.fetchInStakingTx(height)
-	if err != nil {
-		return nil, err
-	}
-	//logging.CPrint(logging.INFO, "FetchRankStakingTx", logging.LogFormat{"staking_txs": stakingTxInfos})
-	sortedStakingTx, err := database.SortMapByValue(stakingTxInfos, height, true)
-	//logging.CPrint(logging.INFO, "after sort", logging.LogFormat{"sort": sortedStakingTx})
-	if err != nil {
-		return nil, err
-	}
-
-	count := len(sortedStakingTx)
-	rankList := make([]database.Rank, count)
-	for i := 0; i < count; i++ {
-		rankList[i].ScriptHash = sortedStakingTx[i].Key
-		rankList[i].Value = sortedStakingTx[i].Value
-
-	}
-	return rankList, nil
-}
-
-func (db *ChainDb) FetchRewardStakingTx(height uint64) ([]database.Reward, uint32, error) {
-	stakingTxInfos, err := db.fetchInStakingTx(height)
-	if err != nil {
-		return nil, 0, err
-	}
-	SortedStakingTx, err := database.SortMapByValue(stakingTxInfos, height, true)
-	if err != nil {
-		return nil, 0, err
-	}
-	count := len(SortedStakingTx)
-	reward := make([]database.Reward, count)
-	for i := 0; i < count; i++ {
-		reward[i].Rank = int32(i)
-		reward[i].ScriptHash = SortedStakingTx[i].Key
-		reward[i].Weight = SortedStakingTx[i].Weight
-		reward[i].StakingTx = stakingTxInfos[SortedStakingTx[i].Key]
-	}
-	return reward, uint32(count), nil
-}
-
-func (db *ChainDb) FetchInStakingTx(height uint64) ([]database.Reward, uint32, error) {
-
-	stakingTxInfos, err := db.fetchInStakingTx(height)
-	if err != nil {
-		return nil, 0, err
-	}
-	SortedStakingTx, err := database.SortMapByValue(stakingTxInfos, height, false)
-	if err != nil {
-		return nil, 0, err
-	}
-	count := len(SortedStakingTx)
-	reward := make([]database.Reward, count)
-	for i := 0; i < count; i++ {
-		reward[i].Rank = int32(i)
-		reward[i].ScriptHash = SortedStakingTx[i].Key
-		reward[i].Weight = SortedStakingTx[i].Weight
-		reward[i].StakingTx = stakingTxInfos[SortedStakingTx[i].Key]
-	}
-	return reward, uint32(count), nil
-}

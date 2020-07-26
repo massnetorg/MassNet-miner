@@ -510,13 +510,38 @@ func checkEntry(t *testing.T, prefix, key string, value []byte) {
 		assert.Equal(t, 40, len(value))
 	case "HTS":
 		assert.Equal(t, 43, len(key))
-		assert.Equal(t, 0, len(value))
+		assert.Equal(t, 4, len(value))
 	case "HTGS":
 		assert.Equal(t, 32, len(key))
 		assert.Equal(t, 0, len(value))
 	case "STL":
-		assert.Equal(t, 51, len(key))
-		assert.Equal(t, 0, len(value))
+		assert.Equal(t, 43, len(key))
+		bitmap := binary.LittleEndian.Uint32(value[0:4])
+		assert.True(t, len(value) >= 15)
+		shift := 0
+		cur := 4
+		for bitmap != 0 {
+			if bitmap&0x01 != 0 {
+				index := value[cur]
+				assert.True(t, int(index) == shift)
+				N := binary.LittleEndian.Uint16(value[cur+1 : cur+3])
+				assert.NotZero(t, N)
+
+				// check no duplication
+				offsets := make(map[uint32]bool)
+				for i := 0; i < int(N); i++ {
+					offset := binary.LittleEndian.Uint32(value[cur+3+8*i:])
+					_, ok := offsets[offset]
+					assert.False(t, ok)
+					offsets[offset] = true
+				}
+
+				cur += 3 + 8*int(N)
+			}
+			bitmap >>= 1
+			shift++
+		}
+		assert.True(t, cur == len(value))
 	case "STG":
 		assert.Equal(t, 43, len(key))
 		assert.Equal(t, 0, len(value))

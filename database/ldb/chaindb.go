@@ -205,8 +205,6 @@ func (db *ChainDb) getBlockStorageMeta() (dbStorageMeta, error) {
 }
 
 func (db *ChainDb) expire(currentHeight uint64) error {
-	var txU stakingTx
-	var txL stakingTx
 	searchKey := stakingTxSearchKey(currentHeight)
 
 	iter := db.stor.NewIterator(storage.BytesPrefix(searchKey))
@@ -220,23 +218,25 @@ func (db *ChainDb) expire(currentHeight uint64) error {
 		scriptHash, val := mustDecodeStakingTxValue(value)
 
 		// stakingTxMap
-		txL.delete = true
-		txL.txSha = &mapKey.txID
-		txL.index = mapKey.index
-		txL.expiredHeight = currentHeight
-		txL.rsh = scriptHash
-		txL.value = val
-		txL.blkHeight = mapKey.blockHeight
-		db.stakingTxMap[mapKey] = &txL
+		db.stakingTxMap[mapKey] = &stakingTx{
+			txSha:         &mapKey.txID,
+			index:         mapKey.index,
+			expiredHeight: currentHeight,
+			rsh:           scriptHash,
+			value:         val,
+			blkHeight:     mapKey.blockHeight,
+			delete:        true,
+		}
 
 		// expiredStakingTxMap
-		txU.txSha = txL.txSha
-		txU.index = mapKey.index
-		txU.expiredHeight = currentHeight
-		txU.rsh = scriptHash
-		txU.value = val
-		txU.blkHeight = mapKey.blockHeight
-		db.expiredStakingTxMap[mapKey] = &txU
+		db.expiredStakingTxMap[mapKey] = &stakingTx{
+			txSha:         &mapKey.txID,
+			index:         mapKey.index,
+			expiredHeight: currentHeight,
+			rsh:           scriptHash,
+			value:         val,
+			blkHeight:     mapKey.blockHeight,
+		}
 
 	}
 	if err := iter.Error(); err != nil {
@@ -246,8 +246,6 @@ func (db *ChainDb) expire(currentHeight uint64) error {
 }
 
 func (db *ChainDb) freeze(currentHeight uint64) error {
-	var txU stakingTx
-	var txL stakingTx
 	searchKey := expiredStakingTxSearchKey(currentHeight)
 
 	iter := db.stor.NewIterator(storage.BytesPrefix(searchKey))
@@ -261,23 +259,25 @@ func (db *ChainDb) freeze(currentHeight uint64) error {
 		scriptHash, val := mustDecodeStakingTxValue(value)
 
 		// expiredStakingTxMap
-		txU.delete = true
-		txU.txSha = &mapKey.txID
-		txU.index = mapKey.index
-		txU.expiredHeight = currentHeight
-		txU.rsh = scriptHash
-		txU.value = val
-		txU.blkHeight = mapKey.blockHeight
-		db.expiredStakingTxMap[mapKey] = &txU
+		db.expiredStakingTxMap[mapKey] = &stakingTx{
+			txSha:         &mapKey.txID,
+			index:         mapKey.index,
+			expiredHeight: currentHeight,
+			rsh:           scriptHash,
+			value:         val,
+			blkHeight:     mapKey.blockHeight,
+			delete:        true,
+		}
 
 		// stakingTxMap
-		txL.txSha = txU.txSha
-		txL.index = mapKey.index
-		txL.value = val
-		txL.expiredHeight = currentHeight
-		txL.blkHeight = mapKey.blockHeight
-		txL.rsh = scriptHash
-		db.stakingTxMap[mapKey] = &txL
+		db.stakingTxMap[mapKey] = &stakingTx{
+			txSha:         &mapKey.txID,
+			index:         mapKey.index,
+			expiredHeight: currentHeight,
+			rsh:           scriptHash,
+			value:         val,
+			blkHeight:     mapKey.blockHeight,
+		}
 
 	}
 
@@ -460,10 +460,6 @@ func makeBlockShaKey(sha *wire.Hash) []byte {
 
 var recordSuffixTx = []byte("TXD")
 var recordSuffixSpentTx = []byte("TXS")
-
-// stakingTx
-var recordStakingTx = []byte("TXL")
-var recordExpiredStakingTx = []byte("TXU")
 
 func shaTxToKey(sha *wire.Hash) []byte {
 	key := make([]byte, len(recordSuffixTx)+len(sha))

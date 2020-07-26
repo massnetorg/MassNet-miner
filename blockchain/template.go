@@ -14,6 +14,7 @@ import (
 	"massnet.org/mass/database"
 	"massnet.org/mass/logging"
 	"massnet.org/mass/massutil"
+	"massnet.org/mass/massutil/safetype"
 	"massnet.org/mass/poc"
 	"massnet.org/mass/pocec"
 	"massnet.org/mass/txscript"
@@ -312,9 +313,14 @@ func reCreateCoinbaseTx(coinbase *wire.MsgTx, bindingTxListReply []*database.Bin
 				coinbase.AddTxIn(txIn)
 			}
 		}
-		totalStakingValue := massutil.ZeroAmount()
+
+		totalWeight := safetype.NewUint128()
 		for _, v := range rewardAddresses {
-			totalStakingValue, err = totalStakingValue.AddInt(v.Value)
+			if nextBlockHeight < consensus.Massip1Activation { // by value
+				totalWeight, err = totalWeight.AddInt(v.Value)
+			} else { // by weight
+				totalWeight, err = totalWeight.Add(v.Weight)
+			}
 			if err != nil {
 				return err
 			}
@@ -331,20 +337,29 @@ func reCreateCoinbaseTx(coinbase *wire.MsgTx, bindingTxListReply []*database.Bin
 			if err != nil {
 				return err
 			}
-			superNodeValue, err := calcSuperNodeReward(superNode, totalStakingValue, rewardAddresses[i].Value)
+
+			nodeWeight := rewardAddresses[i].Weight
+			if nextBlockHeight < consensus.Massip1Activation {
+				nodeWeight, err = safetype.NewUint128FromInt(rewardAddresses[i].Value)
+				if err != nil {
+					return err
+				}
+			}
+			nodeReward, err := calcNodeReward(superNode, totalWeight, nodeWeight)
 			if err != nil {
 				return err
 			}
-			if superNodeValue.IsZero() {
+
+			if nodeReward.IsZero() {
 				// break loop as rewordAddress is in descending order by value
 				break
 			}
-			totalSNValue, err = totalSNValue.Add(superNodeValue)
+			totalSNValue, err = totalSNValue.Add(nodeReward)
 			if err != nil {
 				return err
 			}
 			coinbase.AddTxOut(&wire.TxOut{
-				Value:    superNodeValue.IntValue(),
+				Value:    nodeReward.IntValue(),
 				PkScript: pkScriptSuperNode,
 			})
 		}
@@ -468,12 +483,12 @@ func createCoinbaseTx(nextBlockHeight uint64, addr massutil.Address, rewardAddre
 	return massutil.NewTx(tx), nil
 }
 
-func calcSuperNodeReward(superNode, totalStakingValue massutil.Amount, value int64) (massutil.Amount, error) {
-	u, err := superNode.Value().MulInt(value)
+func calcNodeReward(totalReward massutil.Amount, totalWeight, nodeWeight *safetype.Uint128) (massutil.Amount, error) {
+	u, err := totalReward.Value().Mul(nodeWeight)
 	if err != nil {
 		return massutil.ZeroAmount(), err
 	}
-	u, err = u.Div(totalStakingValue.Value())
+	u, err = u.Div(totalWeight)
 	if err != nil {
 		return massutil.ZeroAmount(), err
 	}
@@ -564,7 +579,7 @@ func (chain *Blockchain) NewBlockTemplate(payoutAddress massutil.Address, templa
 	bestNode := chain.blockTree.bestBlockNode()
 	txs := chain.txPool.TxDescs()
 	punishments := chain.proposalPool.PunishmentProposals()
-	rewardAddress, err := chain.db.FetchRankStakingTx(bestNode.Height + 1)
+	rewardAddress, err := chain.db.FetchUnexpiredStakingRank(bestNode.Height+1, true)
 	if err != nil {
 		return err
 	}

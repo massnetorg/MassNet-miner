@@ -5,6 +5,7 @@ import (
 	"errors"
 
 	"golang.org/x/crypto/ripemd160"
+
 	"massnet.org/mass/config"
 	"massnet.org/mass/massutil"
 	"massnet.org/mass/pocec"
@@ -53,7 +54,7 @@ type Db interface {
 	// InitByGenesisBlock init database by setting genesis block
 	InitByGenesisBlock(block *massutil.Block) (err error)
 
-	// InsertBlock inserts raw block and transaction data from a block
+	// SubmitBlock inserts raw block and transaction data from a block
 	// into the database.  The first block inserted into the database
 	// will be treated as the genesis block.  Every subsequent block insert
 	// requires the referenced parent block to already exist.
@@ -84,11 +85,17 @@ type Db interface {
 	// block chain.
 	FetchBlockShaByHeight(height uint64) (sha *wire.Hash, err error)
 
+	FetchBlockLocByHeight(height uint64) (*BlockLoc, error)
+
 	// ExistsTxSha returns whether or not the given tx hash is present in
 	// the database
 	ExistsTxSha(sha *wire.Hash) (exists bool, err error)
 
 	FetchTxByLoc(blkHeight uint64, txOff int, txLen int) (*wire.MsgTx, error)
+
+	// FetchTxByFileLoc returns transactions saved in file, including
+	// those revoked with chain reorganization, for file is in APPEND mode.
+	FetchTxByFileLoc(blkLoc *BlockLoc, txLoc *wire.TxLoc) (*wire.MsgTx, error)
 
 	// FetchTxBySha returns some data for the given transaction hash. The
 	// implementation may cache the underlying data if desired.
@@ -123,19 +130,18 @@ type Db interface {
 	// which can be used to detect errors.
 	FetchUnSpentTxByShaList(txShaList []*wire.Hash) []*TxReply
 
-	// fetch a rank of reward addresses
-	FetchRankStakingTx(height uint64) ([]Rank, error)
+	// FetchUnexpiredStakingRank returns only currently unexpired staking rank at
+	// target height. This function is for mining and validating block.
+	FetchUnexpiredStakingRank(height uint64, onlyOnList bool) ([]Rank, error)
 
-	// fetch detail info of reward adresses
-	FetchRewardStakingTx(height uint64) ([]Reward, uint32, error)
-
-	// fetch detail info of all staking tx
-	FetchInStakingTx(height uint64) ([]Reward, uint32, error)
+	// FetchStakingRank returns staking rank at any height. This
+	// function may be slow.
+	FetchStakingRank(height uint64, onlyOnList bool) ([]Rank, error)
 
 	// fetch a map of all staking transactions in database
-	FetchStakingTxMap() (StakingTxMapReply, error)
+	FetchStakingTxMap() (StakingNodes, error)
 
-	FetchExpiredStakingTxListByHeight(height uint64) (StakingTxMapReply, error)
+	FetchExpiredStakingTxListByHeight(height uint64) (StakingNodes, error)
 
 	FetchHeightRange(startHeight, endHeight uint64) ([]wire.Hash, error)
 
@@ -184,7 +190,7 @@ type Db interface {
 	DeleteAddrIndex(hash *wire.Hash, height uint64) (err error)
 
 	// FetchScriptHashRelatedTx  returns all relevant txhash mapped by block height
-	FetchScriptHashRelatedTx(scriptHashes [][]byte, startBlock, stopBlock uint64, chainParams *config.Params) (map[uint64][]*wire.TxLoc, error)
+	FetchScriptHashRelatedTx(scriptHashes [][]byte, startBlock, stopBlock uint64) (map[uint64][]*wire.TxLoc, error)
 
 	CheckScriptHashUsed(scriptHash []byte) (bool, error)
 
@@ -292,8 +298,60 @@ type BindingTxReply struct {
 	Index      uint32
 }
 
-// stakingTx
-type StakingTxMapReply map[[sha256.Size]byte]map[wire.OutPoint]StakingTxInfo
+type StakingTxOutAtHeight map[uint64]map[wire.OutPoint]StakingTxInfo
+
+// Returns false if already exists
+func (sh StakingTxOutAtHeight) Put(op wire.OutPoint, stk StakingTxInfo) (success bool) {
+	m, ok := sh[stk.BlkHeight]
+	if !ok {
+		m = make(map[wire.OutPoint]StakingTxInfo)
+		sh[stk.BlkHeight] = m
+	}
+	if _, exist := m[op]; exist {
+		return false
+	}
+	m[op] = stk
+	return true
+}
+
+type StakingNodes map[[sha256.Size]byte]StakingTxOutAtHeight
+
+func (nodes StakingNodes) Get(key [sha256.Size]byte) StakingTxOutAtHeight {
+	m, ok := nodes[key]
+	if !ok {
+		m = make(StakingTxOutAtHeight)
+		nodes[key] = m
+	}
+	return m
+}
+
+func (nodes StakingNodes) IsEmpty(key [sha256.Size]byte) bool {
+	for _, v := range nodes[key] {
+		if len(v) > 0 {
+			return false
+		}
+	}
+	return true
+}
+
+func (nodes StakingNodes) Delete(key [sha256.Size]byte, blkHeight uint64, op wire.OutPoint) bool {
+	m1, ok := nodes[key]
+	if !ok {
+		return false
+	}
+
+	m2, ok := m1[blkHeight]
+	if !ok {
+		return false
+	}
+
+	_, ok = m2[op]
+	if !ok {
+		return false
+	}
+	delete(m2, op)
+	return true
+}
 
 // BlockAddrIndex represents the indexing structure for addresses.
 // It maps a hash160 to a list of transaction locations within a block that
@@ -316,4 +374,12 @@ type AddrIndexData struct {
 type BLHeight struct {
 	BitLength int
 	BlkHeight uint64
+}
+
+type BlockLoc struct {
+	Height uint64
+	Hash   wire.Hash
+	File   uint32
+	Offset uint64
+	Length uint64
 }

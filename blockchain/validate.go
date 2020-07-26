@@ -220,12 +220,11 @@ func checkCoinbaseInputs(tx *massutil.Tx, txStore TxStore, pk *pocec.PublicKey,
 	return totalMaxwellIn, nil
 }
 
-//stakingTx
-//check the output of coinbase
-func checkCoinbase(tx *massutil.Tx, stakingTxs []database.Rank, nextBlockHeight uint64,
+//checkCoinbase checks the outputs of coinbase
+func checkCoinbase(tx *massutil.Tx, stakingRanks []database.Rank, nextBlockHeight uint64,
 	totalMaxwellIn massutil.Amount, net *config.Params, bitLength int) (massutil.Amount, error) {
 
-	num := len(stakingTxs)
+	num := len(stakingRanks)
 	StakingRewardNum, err := extractCoinbaseStakingRewardNumber(tx)
 	if err != nil {
 		return massutil.ZeroAmount(), err
@@ -239,52 +238,51 @@ func checkCoinbase(tx *massutil.Tx, stakingTxs []database.Rank, nextBlockHeight 
 		return massutil.ZeroAmount(), err
 	}
 
-	totalStakingValue := massutil.ZeroAmount()
-	for _, v := range stakingTxs {
-		totalStakingValue, err = totalStakingValue.AddInt(v.Value)
+	totalWeight := safetype.NewUint128()
+	for _, v := range stakingRanks {
+		if nextBlockHeight < consensus.Massip1Activation { // by value
+			totalWeight, err = totalWeight.AddInt(v.Value)
+		} else { // by weight
+			totalWeight, err = totalWeight.Add(v.Weight)
+		}
 		if err != nil {
 			return massutil.ZeroAmount(), err
 		}
 	}
 
-	// check stakingTxs reward output
-	//actualRewardNum := len(tx.MsgTx().TxOut) - 1 - offset
-	//if num < actualRewardNum {
-	//	logging.CPrint(logging.ERROR, "incorrect staking output number",
-	//		logging.LogFormat{
-	//			"blkHeight":       nextBlockHeight,
-	//			"totalStakingTx":     num,
-	//			"actualRewardNum": actualRewardNum,
-	//		})
-	//	return nil, ErrCoinbaseOutputNum
-	//}
 	i := 0
 	for ; i < num; i++ {
-
-		expectValue, err := calcSuperNodeReward(superNode, totalStakingValue, stakingTxs[i].Value)
+		nodeWeight := stakingRanks[i].Weight
+		if nextBlockHeight < consensus.Massip1Activation {
+			nodeWeight, err = safetype.NewUint128FromInt(stakingRanks[i].Value)
+			if err != nil {
+				return massutil.ZeroAmount(), err
+			}
+		}
+		expectAmount, err := calcNodeReward(superNode, totalWeight, nodeWeight)
 		if err != nil {
 			return massutil.ZeroAmount(), err
 		}
 
-		if expectValue.IsZero() {
+		if expectAmount.IsZero() {
 			break
 		}
 
 		// check value
-		if expectValue.IntValue() != tx.MsgTx().TxOut[i].Value {
+		if expectAmount.IntValue() != tx.MsgTx().TxOut[i].Value {
 			logging.CPrint(logging.ERROR, "incorrect reward value for stakingTxs",
 				logging.LogFormat{
 					"block height": nextBlockHeight,
 					"index":        i,
 					"actual":       tx.MsgTx().TxOut[i].Value,
-					"expect":       expectValue,
+					"expect":       expectAmount,
 				})
 			return massutil.ZeroAmount(), errors.New("incorrect reward value for stakingTxs")
 		}
 
 		// check pkscript
 		key := make([]byte, sha256.Size)
-		copy(key, stakingTxs[i].ScriptHash[:])
+		copy(key, stakingRanks[i].ScriptHash[:])
 		pkScriptSuperNode, err := txscript.PayToWitnessScriptHashScript(key)
 		if err != nil {
 			return massutil.ZeroAmount(), err
@@ -1214,52 +1212,38 @@ func checkDupSpend(preOutPoint wire.OutPoint, spent []bool) error {
 	return nil
 }
 
+// checkTxInMaturity ensures the transaction is not spending coins which have not
+// yet reached the required coinbase maturity.
 func checkTxInMaturity(txData *TxData, txHeight uint64, preOutPoint wire.OutPoint, isCoinbase bool) error {
 	blocksSincePrev := uint64(0)
 	if txHeight > txData.BlockHeight {
 		blocksSincePrev = txHeight - txData.BlockHeight
 	}
-	if !isCoinbase {
-		// Ensure the transaction is not spending coins which have not
-		// yet reached the required coinbase maturity.
-		if IsCoinBase(txData.Tx) {
-			if blocksSincePrev < consensus.CoinbaseMaturity {
-				logging.CPrint(logging.ERROR, "tried to spend coinbase transaction before required maturity",
-					logging.LogFormat{
-						"next block height": txHeight,
-						"txIn height":       txData.BlockHeight,
-						"coinbase maturity": consensus.CoinbaseMaturity,
-						"txInHash":          preOutPoint.Hash,
-						"txInIndex":         preOutPoint.Index,
-					})
-				return ErrImmatureSpend
-			}
+	if IsCoinBase(txData.Tx) {
+		if blocksSincePrev < consensus.CoinbaseMaturity {
+			logging.CPrint(logging.WARN, "try to spend immature coinbase",
+				logging.LogFormat{
+					"next block height": txHeight,
+					"txIn height":       txData.BlockHeight,
+					"coinbase maturity": consensus.CoinbaseMaturity,
+					"txInHash":          preOutPoint.Hash,
+					"txInIndex":         preOutPoint.Index,
+				})
+			return ErrImmatureSpend
 		}
-	} else {
-		if IsCoinBase(txData.Tx) {
-			if blocksSincePrev < consensus.CoinbaseMaturity {
-				logging.CPrint(logging.ERROR, "tried to spend coinbase before required mature",
-					logging.LogFormat{
-						"next block height": txHeight,
-						"txIn height":       txData.BlockHeight,
-						"coinbase maturity": consensus.CoinbaseMaturity,
-						"txInHash":          preOutPoint.Hash,
-						"txInIndex":         preOutPoint.Index,
-					})
-				return ErrImmatureSpend
-			}
-		} else {
-			if blocksSincePrev < consensus.TransactionMaturity {
-				logging.CPrint(logging.ERROR, "the txIn is not mature",
-					logging.LogFormat{
-						"next block height":     txHeight,
-						"txIn height":           txData.BlockHeight,
-						"transactions maturity": consensus.TransactionMaturity,
-						"txInHash":              preOutPoint.Hash,
-						"txInIndex":             preOutPoint.Index,
-					})
-				return ErrImmatureSpend
-			}
+		return nil
+	}
+	if isCoinbase {
+		if blocksSincePrev < consensus.TransactionMaturity {
+			logging.CPrint(logging.ERROR, "try to spend immature transaction",
+				logging.LogFormat{
+					"next block height":     txHeight,
+					"txIn height":           txData.BlockHeight,
+					"transactions maturity": consensus.TransactionMaturity,
+					"txInHash":              preOutPoint.Hash,
+					"txInIndex":             preOutPoint.Index,
+				})
+			return ErrImmatureSpend
 		}
 	}
 	return nil

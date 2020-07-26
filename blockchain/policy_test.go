@@ -96,14 +96,14 @@ func TestCalcMinRequiredTxRelayFee(t *testing.T) {
 	}
 }
 
-// TestCheckPkScriptStandard tests the checkPkScriptStandard API.
-func TestCheckPkScriptStandard(t *testing.T) {
+// TestCheckParsePkScript tests the checkParsePkScript.
+func TestCheckParsePkScript(t *testing.T) {
 	var pubKeys [][]byte
 	var witnessV0Addr massutil.Address
 	for i := 0; i < 4; i++ {
 		pk, err := btcec.NewPrivateKey(btcec.S256())
 		if err != nil {
-			t.Fatalf("TestCheckPkScriptStandard NewPrivateKey failed: %v",
+			t.Fatalf("TestCheckParsePkScript NewPrivateKey failed: %v",
 				err)
 			return
 		}
@@ -179,19 +179,20 @@ func TestCheckPkScriptStandard(t *testing.T) {
 		t.Run(test.name, func(t *testing.T) {
 			script, err := test.script.Script()
 			if err != nil {
-				t.Fatalf("TestCheckPkScriptStandard test '%s' "+
+				t.Fatalf("TestCheckParsePkScript test '%s' "+
 					"failed: %v", test.name, err)
 				return
 			}
-			txOut := &wire.TxOut{
+			msgtx := wire.NewMsgTx()
+			msgtx.AddTxOut(&wire.TxOut{
 				PkScript: script,
 				Value:    1000,
-			}
-			cache := make(map[txscript.ScriptClass]bool)
-			_, err = checkPkScriptStandard(txOut, nil, cache, nil)
+			})
+			tx := massutil.NewTx(msgtx)
+			err = checkParsePkScript(tx, nil)
 			if (test.isStandard && err != nil) ||
 				(!test.isStandard && err == nil) {
-				t.Fatalf("TestCheckPkScriptStandard test '%s' failed",
+				t.Fatalf("TestCheckParsePkScript test '%s' failed",
 					test.name)
 				return
 			}
@@ -199,12 +200,12 @@ func TestCheckPkScriptStandard(t *testing.T) {
 	}
 }
 
-// TestCheckPkScriptStandard2 tests the witness staking script.
-func TestCheckPkScriptStandard2(t *testing.T) {
+// TestCheckParsePkScript2 tests the witness staking script.
+func TestCheckParsePkScript2(t *testing.T) {
 	var witnessV0Addr massutil.Address
 	pk, err := btcec.NewPrivateKey(btcec.S256())
 	if err != nil {
-		t.Fatalf("TestCheckPkScriptStandard2 NewPrivateKey failed: %v",
+		t.Fatalf("TestCheckParsePkScript2 NewPrivateKey failed: %v",
 			err)
 		return
 	}
@@ -276,12 +277,13 @@ func TestCheckPkScriptStandard2(t *testing.T) {
 				t.Fatalf("failed: %v", err)
 				return
 			}
-			txOut := &wire.TxOut{
+			msgtx := wire.NewMsgTx()
+			msgtx.AddTxOut(&wire.TxOut{
 				PkScript: script,
 				Value:    int64(test.stakingValue),
-			}
-			cache := make(map[txscript.ScriptClass]bool)
-			_, err = checkPkScriptStandard(txOut, nil, cache, nil)
+			})
+			tx := massutil.NewTx(msgtx)
+			err = checkParsePkScript(tx, nil)
 			assert.Equal(t, err, test.err)
 			if (test.isStandard && err != nil) ||
 				(!test.isStandard && err == nil) {
@@ -293,12 +295,12 @@ func TestCheckPkScriptStandard2(t *testing.T) {
 
 }
 
-// TestCheckPkScriptStandard2 tests the witness binding script.
-func TestCheckPkScriptStandard3(t *testing.T) {
+// TestCheckParsePkScript3 tests the witness binding script.
+func TestCheckParsePkScript3(t *testing.T) {
 	var witnessV0Addr massutil.Address
 	pk, err := btcec.NewPrivateKey(btcec.S256())
 	if err != nil {
-		t.Fatalf("TestCheckPkScriptStandard3 NewPrivateKey failed: %v",
+		t.Fatalf("TestCheckParsePkScript3 NewPrivateKey failed: %v",
 			err)
 		return
 	}
@@ -447,8 +449,8 @@ func TestCheckPkScriptStandard3(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			cache := make(map[txscript.ScriptClass]bool)
-			_, err = checkPkScriptStandard(test.tx.TxOut[0], test.tx, cache, test.txStore)
+			tx := massutil.NewTx(test.tx)
+			err = checkParsePkScript(tx, test.txStore)
 			assert.Equal(t, err, test.err)
 			if (test.isStandard && err != nil) ||
 				(!test.isStandard && err == nil) {
