@@ -15,7 +15,9 @@ type SpaceKeeper interface {
 	Configured() bool
 	ConfigureByBitLength(BlCount map[int]int, execPlot, execMine bool) ([]engine.WorkSpaceInfo, error)
 	ConfigureBySize(targetSize uint64, execPlot, execMine bool) ([]engine.WorkSpaceInfo, error)
+	ConfigureByPath(paths []string, sizes []uint64, execPlot, execMine bool) ([]engine.WorkSpaceInfo, error)
 	AvailableDiskSize() (uint64, error)
+	WorkSpaceInfosByDirs() (dirs []string, results [][]engine.WorkSpaceInfo, err error)
 }
 
 type ConfigurableSpaceKeeper struct {
@@ -52,6 +54,19 @@ func (csk *ConfigurableSpaceKeeper) ConfigureBySize(targetSize uint64, execPlot,
 	return sk.ConfigureBySize(targetSize, execPlot, execMine)
 }
 
+func (csk *ConfigurableSpaceKeeper) ConfigureByPath(paths []string, sizes []uint64, execPlot, execMine bool) ([]engine.WorkSpaceInfo, error) {
+	sk, err := getInstance(csk.SpaceKeeper)
+	if err != nil {
+		logging.CPrint(logging.ERROR, "fail to assert SpaceKeeper type", logging.LogFormat{"actual": reflect.TypeOf(sk)})
+		return nil, err
+	}
+	sizesInt := make([]int, len(sizes))
+	for i := range sizes {
+		sizesInt[i] = int(sizes[i])
+	}
+	return sk.ConfigureByPath(paths, sizesInt, execPlot, execMine)
+}
+
 func (csk *ConfigurableSpaceKeeper) AvailableDiskSize() (uint64, error) {
 	sk, err := getInstance(csk.SpaceKeeper)
 	if err != nil {
@@ -59,6 +74,15 @@ func (csk *ConfigurableSpaceKeeper) AvailableDiskSize() (uint64, error) {
 		return 0, err
 	}
 	return sk.AvailableDiskSize(), nil
+}
+
+func (csk *ConfigurableSpaceKeeper) WorkSpaceInfosByDirs() (dirs []string, results [][]engine.WorkSpaceInfo, err error) {
+	sk, err := getInstance(csk.SpaceKeeper)
+	if err != nil {
+		logging.CPrint(logging.ERROR, "fail to assert SpaceKeeper type", logging.LogFormat{"actual": reflect.TypeOf(sk)})
+		return nil, nil, err
+	}
+	return sk.WorkSpaceInfosByDirs()
 }
 
 func getInstance(sk spacekeeper.SpaceKeeper) (*capacity.SpaceKeeper, error) {

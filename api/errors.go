@@ -56,16 +56,17 @@ const (
 	ErrNoMinningAddrress = 1703
 
 	// Miner err
-	ErrAPIMinerInternal        = 1801
-	ErrAPIMinerNoConfig        = 1802
-	ErrAPIMinerSpaceNotFound   = 1803
-	ErrAPIMinerSpaceNotReady   = 1804
-	ErrAPIMinerNotStopped      = 1805
-	ErrAPIMinerInvalidAddress  = 1806
-	ErrAPIMinerInvalidCapacity = 1807
-	ErrAPIMinerInvalidSpaceID  = 1808
-	ErrAPIMinerNoAddress       = 1809
-	ErrAPIMinerWrongPassphrase = 1810
+	ErrAPIMinerInternal          = 1801
+	ErrAPIMinerNoConfig          = 1802
+	ErrAPIMinerSpaceNotFound     = 1803
+	ErrAPIMinerSpaceNotReady     = 1804
+	ErrAPIMinerNotStopped        = 1805
+	ErrAPIMinerInvalidAddress    = 1806
+	ErrAPIMinerInvalidCapacity   = 1807
+	ErrAPIMinerInvalidSpaceID    = 1808
+	ErrAPIMinerNoAddress         = 1809
+	ErrAPIMinerWrongPassphrase   = 1810
+	ErrAPIMinerInvalidAllocation = 1811
 
 	// Wallet err
 	ErrAPIExportWallet   = 1901
@@ -78,58 +79,59 @@ const (
 
 var ErrCode = map[uint32]string{
 
-	ErrAPINoTxInfo:             "No information available about transaction",
-	ErrAPIInvalidIndex:         "Invalid OutPoint index",
-	ErrAPINoTxOut:              "Invalid preOutPoint",
-	ErrAPIDuplicateTx:          "OutPoint index has been spent",
-	ErrAPIInsufficient:         "Insufficient balance",
-	ErrAPIFailedToMaxwell:      "Failed convert the amount",
-	ErrAPIFindingUtxo:          "Failed to find Utxo",
-	ErrAPIFindingBalance:       "Failed to find balance",
-	ErrAPIInvalidParameter:     "Invalid parameter",
-	ErrAPIInvalidLockTime:      "Invalid locktime",
-	ErrAPIInvalidAmount:        "Invalid amount",
-	ErrAPIInvalidAddress:       "Invalid address",
-	ErrAPIInvalidFlag:          "Invalid sighash parameter",
-	ErrAPICreatePkScript:       "Failed to create pkScript",
-	ErrAPIFailedDecodeAddress:  "Failed to decode address",
-	ErrAPIDecodeHexString:      "Argument must be hexadecimal string",
-	ErrAPIShaHashFromStr:       "Failed to decode hash from string",
-	ErrAPIEncode:               "Failed to encode data",
-	ErrAPIDeserialization:      "Failed to deserialize",
-	ErrAPIDecodePrivKey:        "Failed to decode WIF for the privkey",
-	ErrAPIDisasmScript:         "Failed to disasm script to string",
-	ErrAPINet:                  "Mismatched network",
-	ErrAPISignTx:               "Failed to sign transaction",
-	ErrAPINewEngine:            "Failed to create new engine",
-	ErrAPIExecute:              "Failed to execute engine",
-	ErrAPIRejectTx:             "Reject receive transaction",
-	ErrAPIExtractPKScript:      "Failed to extract info from pkScript",
-	ErrAPINewestHash:           "Failed to get newest hash",
-	ErrAPIBlockNotFound:        "Failed to find block",
-	ErrAPIRawTx:                "Failed to create raw transaction",
-	ErrAPINextBlock:            "No next block",
-	ErrAPIBlockHashByHeight:    "Failed to get block hash by height",
-	ErrAPIBlockHeaderNotFound:  "Failed to find block header",
-	ErrNoMinningAddrress:       "No payment addresses specified via --miningaddr",
-	ErrAPIUnknownErr:           "Unknown error",
-	ErrAPIEstimateTxFee:        "Failed to estimateTxFee",
-	ErrAPIUserTxFee:            "Invalid userTxFee",
-	ErrAPIMinerInternal:        "Error in miner internal",
-	ErrAPIMinerNoConfig:        "No config specified",
-	ErrAPIMinerSpaceNotFound:   "Fail to find space",
-	ErrAPIMinerSpaceNotReady:   "Not Ready space",
-	ErrAPIMinerNotStopped:      "Invalid miner status, should be stopped",
-	ErrAPIMinerInvalidAddress:  "Invalid miner payout address",
-	ErrAPIMinerInvalidCapacity: "Invalid miner capacity",
-	ErrAPIMinerInvalidSpaceID:  "Invalid spaceID",
-	ErrAPIInvalidHash:          "Invalid hash",
-	ErrAPIInvalidPublicKey:     "Invalid public key",
-	ErrAPIInvalidWalletId:      "Invalid walletId",
-	ErrAPIInvalidPassphrase:    "Invalid passphrase",
-	ErrAPIInvalidSpaceID:       "Invalid space id",
-	ErrAPIMinerNoAddress:       "Missing miner payout addresses",
-	ErrAPIMinerWrongPassphrase: "Wrong miner passphrase",
+	ErrAPINoTxInfo:               "No information available about transaction",
+	ErrAPIInvalidIndex:           "Invalid OutPoint index",
+	ErrAPINoTxOut:                "Invalid preOutPoint",
+	ErrAPIDuplicateTx:            "OutPoint index has been spent",
+	ErrAPIInsufficient:           "Insufficient balance",
+	ErrAPIFailedToMaxwell:        "Failed convert the amount",
+	ErrAPIFindingUtxo:            "Failed to find Utxo",
+	ErrAPIFindingBalance:         "Failed to find balance",
+	ErrAPIInvalidParameter:       "Invalid parameter",
+	ErrAPIInvalidLockTime:        "Invalid locktime",
+	ErrAPIInvalidAmount:          "Invalid amount",
+	ErrAPIInvalidAddress:         "Invalid address",
+	ErrAPIInvalidFlag:            "Invalid sighash parameter",
+	ErrAPICreatePkScript:         "Failed to create pkScript",
+	ErrAPIFailedDecodeAddress:    "Failed to decode address",
+	ErrAPIDecodeHexString:        "Argument must be hexadecimal string",
+	ErrAPIShaHashFromStr:         "Failed to decode hash from string",
+	ErrAPIEncode:                 "Failed to encode data",
+	ErrAPIDeserialization:        "Failed to deserialize",
+	ErrAPIDecodePrivKey:          "Failed to decode WIF for the privkey",
+	ErrAPIDisasmScript:           "Failed to disasm script to string",
+	ErrAPINet:                    "Mismatched network",
+	ErrAPISignTx:                 "Failed to sign transaction",
+	ErrAPINewEngine:              "Failed to create new engine",
+	ErrAPIExecute:                "Failed to execute engine",
+	ErrAPIRejectTx:               "Reject receive transaction",
+	ErrAPIExtractPKScript:        "Failed to extract info from pkScript",
+	ErrAPINewestHash:             "Failed to get newest hash",
+	ErrAPIBlockNotFound:          "Failed to find block",
+	ErrAPIRawTx:                  "Failed to create raw transaction",
+	ErrAPINextBlock:              "No next block",
+	ErrAPIBlockHashByHeight:      "Failed to get block hash by height",
+	ErrAPIBlockHeaderNotFound:    "Failed to find block header",
+	ErrNoMinningAddrress:         "No payment addresses specified via --miningaddr",
+	ErrAPIUnknownErr:             "Unknown error",
+	ErrAPIEstimateTxFee:          "Failed to estimateTxFee",
+	ErrAPIUserTxFee:              "Invalid userTxFee",
+	ErrAPIMinerInternal:          "Error in miner internal",
+	ErrAPIMinerNoConfig:          "No config specified",
+	ErrAPIMinerSpaceNotFound:     "Fail to find space",
+	ErrAPIMinerSpaceNotReady:     "Not Ready space",
+	ErrAPIMinerNotStopped:        "Invalid miner status, should be stopped",
+	ErrAPIMinerInvalidAddress:    "Invalid miner payout address",
+	ErrAPIMinerInvalidCapacity:   "Invalid miner capacity",
+	ErrAPIMinerInvalidSpaceID:    "Invalid spaceID",
+	ErrAPIInvalidHash:            "Invalid hash",
+	ErrAPIInvalidPublicKey:       "Invalid public key",
+	ErrAPIInvalidWalletId:        "Invalid walletId",
+	ErrAPIInvalidPassphrase:      "Invalid passphrase",
+	ErrAPIInvalidSpaceID:         "Invalid space id",
+	ErrAPIMinerNoAddress:         "Missing miner payout addresses",
+	ErrAPIMinerWrongPassphrase:   "Wrong miner passphrase",
+	ErrAPIMinerInvalidAllocation: "Invalid miner allocation",
 
 	// Wallet err
 	ErrAPIExportWallet:   "Failed to export wallet",

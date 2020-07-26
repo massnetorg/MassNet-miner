@@ -3,6 +3,9 @@ package api
 import (
 	"encoding/hex"
 	"errors"
+	"math/big"
+	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 
@@ -20,11 +23,17 @@ import (
 )
 
 func (s *Server) ConfigureCapacity(ctx context.Context, in *pb.ConfigureSpaceKeeperRequest) (*pb.WorkSpacesResponse, error) {
-	logging.CPrint(logging.INFO, "Received a request for ConfigureCapacity", logging.LogFormat{"capacity": in.Capacity, "payout_addresses": in.PayoutAddresses})
+	logging.CPrint(logging.INFO, "ConfigureCapacity called", logging.LogFormat{"capacity": in.Capacity, "payout_addresses": in.PayoutAddresses})
+	defer logging.CPrint(logging.INFO, "ConfigureCapacity responded")
+
+	err := checkPassLen(in.Passphrase)
+	if err != nil {
+		return nil, err
+	}
 
 	if len(in.PayoutAddresses) == 0 {
-		logging.CPrint(logging.ERROR, "coinbase_address is empty")
-		return nil, status.New(ErrAPIMinerInternal, ErrCode[ErrAPIMinerInternal]).Err()
+		logging.CPrint(logging.ERROR, "payout_addresses is empty")
+		return nil, status.New(ErrAPIMinerNoAddress, ErrCode[ErrAPIMinerNoAddress]).Err()
 	}
 	for _, addr := range in.PayoutAddresses {
 		err := checkAddressLen(addr)
@@ -32,21 +41,6 @@ func (s *Server) ConfigureCapacity(ctx context.Context, in *pb.ConfigureSpaceKee
 			return nil, err
 		}
 	}
-	err := checkPassLen(in.Passphrase)
-	if err != nil {
-		return nil, err
-	}
-
-	var diskSize = in.Capacity * poc.MiB
-	if err = checkMinerDiskSize(s.spaceKeeper, in.Capacity); err != nil {
-		logging.CPrint(logging.ERROR, "invalid capacity size", logging.LogFormat{"err": err, "capacity": in.Capacity})
-		return nil, err
-	}
-	if s.spaceKeeper.Started() {
-		logging.CPrint(logging.ERROR, "cannot configure while capacity is running")
-		return nil, status.New(ErrAPIMinerNotStopped, ErrCode[ErrAPIMinerNotStopped]).Err()
-	}
-
 	payoutAddresses, err := massutil.NewAddressesFromStringList(in.PayoutAddresses, &config.ChainParams)
 	if err != nil {
 		logging.CPrint(logging.ERROR, "fail to decode coinbase_address", logging.LogFormat{"addr_list": in.PayoutAddresses})
@@ -57,10 +51,22 @@ func (s *Server) ConfigureCapacity(ctx context.Context, in *pb.ConfigureSpaceKee
 			logging.LogFormat{"allowed": config.MaxMiningPayoutAddresses, "count": len(payoutAddresses)})
 		return nil, status.New(ErrAPIMinerInvalidAddress, ErrCode[ErrAPIMinerInvalidAddress]).Err()
 	}
+
+	var diskSize = in.Capacity * poc.MiB
+	if err = checkMinerDiskSize(s.spaceKeeper, in.Capacity); err != nil {
+		logging.CPrint(logging.ERROR, "invalid capacity size", logging.LogFormat{"err": err, "capacity": in.Capacity})
+		return nil, err
+	}
+
+	if s.spaceKeeper.Started() {
+		logging.CPrint(logging.ERROR, "cannot configure while capacity is running")
+		return nil, status.New(ErrAPIMinerNotStopped, ErrCode[ErrAPIMinerNotStopped]).Err()
+	}
+
 	if err := s.pocMiner.SetPayoutAddresses(payoutAddresses); err != nil {
 		logging.CPrint(logging.ERROR, "missing miner payout address",
 			logging.LogFormat{"allowed": config.MaxMiningPayoutAddresses, "count": len(payoutAddresses)})
-		return nil, status.New(ErrAPIMinerNoAddress, ErrCode[ErrAPIMinerNoAddress]).Err()
+		return nil, status.New(ErrAPIMinerInternal, ErrCode[ErrAPIMinerInternal]).Err()
 	}
 	if err := s.pocWallet.Unlock([]byte(in.Passphrase)); err != nil {
 		logging.CPrint(logging.ERROR, "fail to unlock poc wallet",
@@ -77,7 +83,6 @@ func (s *Server) ConfigureCapacity(ctx context.Context, in *pb.ConfigureSpaceKee
 		return nil, err
 	}
 
-	logging.CPrint(logging.INFO, "ConfigureCapacity completed")
 	return &pb.WorkSpacesResponse{SpaceCount: uint32(len(resultList)), Spaces: resultList}, nil
 }
 
@@ -95,6 +100,112 @@ func (s *Server) GetCapacitySpaces(ctx context.Context, in *empty.Empty) (*pb.Wo
 
 	logging.CPrint(logging.INFO, "GetCapacitySpaces completed")
 	return &pb.WorkSpacesResponse{SpaceCount: uint32(len(resultList)), Spaces: resultList}, nil
+}
+
+func (s *Server) ConfigureCapacityByDirs(ctx context.Context, in *pb.ConfigureSpaceKeeperByDirsRequest) (*pb.WorkSpacesByDirsResponse, error) {
+	logging.CPrint(logging.INFO, "ConfigureCapacityByDirs called", logging.LogFormat{"capacity": in.Allocations, "payout_addresses": in.PayoutAddresses})
+	defer logging.CPrint(logging.INFO, "ConfigureCapacityByDirs responded")
+
+	err := checkPassLen(in.Passphrase)
+	if err != nil {
+		return nil, err
+	}
+
+	if len(in.PayoutAddresses) == 0 {
+		logging.CPrint(logging.ERROR, "payout_addresses is empty")
+		return nil, status.New(ErrAPIMinerNoAddress, ErrCode[ErrAPIMinerNoAddress]).Err()
+	}
+	for _, addr := range in.PayoutAddresses {
+		err := checkAddressLen(addr)
+		if err != nil {
+			return nil, err
+		}
+	}
+	payoutAddresses, err := massutil.NewAddressesFromStringList(in.PayoutAddresses, &config.ChainParams)
+	if err != nil {
+		logging.CPrint(logging.ERROR, "fail to decode coinbase_address", logging.LogFormat{"addr_list": in.PayoutAddresses})
+		return nil, status.New(ErrAPIMinerInvalidAddress, ErrCode[ErrAPIMinerInvalidAddress]).Err()
+	}
+	if len(payoutAddresses) > config.MaxMiningPayoutAddresses {
+		logging.CPrint(logging.ERROR, "coinbase_address is more than allowed",
+			logging.LogFormat{"allowed": config.MaxMiningPayoutAddresses, "count": len(payoutAddresses)})
+		return nil, status.New(ErrAPIMinerInvalidAddress, ErrCode[ErrAPIMinerInvalidAddress]).Err()
+	}
+
+	dirs, capacities := make([]string, len(in.Allocations)), make([]uint64, len(in.Allocations))
+	for i, alloc := range in.Allocations {
+		if alloc == nil {
+			logging.CPrint(logging.ERROR, "miner allocation is nil", logging.LogFormat{"index": i})
+			return nil, status.New(ErrAPIMinerInvalidAllocation, ErrCode[ErrAPIMinerInvalidAllocation]).Err()
+		}
+		absDir, err := filepath.Abs(alloc.Directory)
+		if err != nil {
+			logging.CPrint(logging.ERROR, "fail to get abs path", logging.LogFormat{"dir": alloc.Directory, "err": err})
+			return nil, status.New(ErrAPIMinerInvalidAllocation, ErrCode[ErrAPIMinerInvalidAllocation]).Err()
+		}
+		if fi, err := os.Stat(absDir); err != nil {
+			if !os.IsNotExist(err) {
+				logging.CPrint(logging.ERROR, "fail to get file stat", logging.LogFormat{"err": err})
+				return nil, status.New(ErrAPIMinerInvalidAllocation, ErrCode[ErrAPIMinerInvalidAllocation]).Err()
+			}
+			if err = os.MkdirAll(absDir, 0700); err != nil {
+				logging.CPrint(logging.ERROR, "mkdir failed", logging.LogFormat{"dir": absDir, "err": err})
+				return nil, err
+			}
+		} else if !fi.IsDir() {
+			logging.CPrint(logging.ERROR, "not directory", logging.LogFormat{"dir": absDir})
+			return nil, status.New(ErrAPIMinerInvalidAllocation, ErrCode[ErrAPIMinerInvalidAllocation]).Err()
+		}
+		if err = checkPathDiskSize(absDir, alloc.Capacity); err != nil {
+			logging.CPrint(logging.ERROR, "invalid capacity size",
+				logging.LogFormat{"err": err, "capacity": alloc.Capacity, "directory": absDir})
+			return nil, err
+		}
+		dirs[i] = absDir
+		capacities[i] = alloc.Capacity * poc.MiB
+	}
+
+	if s.spaceKeeper.Started() {
+		logging.CPrint(logging.ERROR, "cannot configure while capacity is running")
+		return nil, status.New(ErrAPIMinerNotStopped, ErrCode[ErrAPIMinerNotStopped]).Err()
+	}
+
+	if err := s.pocMiner.SetPayoutAddresses(payoutAddresses); err != nil {
+		logging.CPrint(logging.ERROR, "missing miner payout address",
+			logging.LogFormat{"allowed": config.MaxMiningPayoutAddresses, "count": len(payoutAddresses)})
+		return nil, status.New(ErrAPIMinerInternal, ErrCode[ErrAPIMinerInternal]).Err()
+	}
+	if err := s.pocWallet.Unlock([]byte(in.Passphrase)); err != nil {
+		logging.CPrint(logging.ERROR, "fail to unlock poc wallet",
+			logging.LogFormat{"err": err})
+		return nil, status.New(ErrAPIMinerWrongPassphrase, ErrCode[ErrAPIMinerWrongPassphrase]).Err()
+	}
+	_, err = s.spaceKeeper.ConfigureByPath(dirs, capacities, false, false)
+	if err != nil {
+		logging.CPrint(logging.ERROR, "fail to configure spaceKeeper", logging.LogFormat{"err": err})
+		return nil, status.New(ErrAPIMinerInternal, err.Error()).Err()
+	}
+	alloctions, err := s.getCapacitySpacesByDirs()
+	if err != nil {
+		return nil, err
+	}
+	return &pb.WorkSpacesByDirsResponse{DirectoryCount: uint32(len(alloctions)), Allocations: alloctions}, nil
+}
+
+func (s *Server) GetCapacitySpacesByDirs(ctx context.Context, in *empty.Empty) (*pb.WorkSpacesByDirsResponse, error) {
+	logging.CPrint(logging.INFO, "GetCapacitySpacesByDirs called")
+	defer logging.CPrint(logging.INFO, "GetCapacitySpaces responded")
+
+	if !s.spaceKeeper.Configured() {
+		logging.CPrint(logging.ERROR, "spaceKeeper is not configured")
+		return nil, status.New(ErrAPIMinerNoConfig, ErrCode[ErrAPIMinerNoConfig]).Err()
+	}
+	allocations, err := s.getCapacitySpacesByDirs()
+	if err != nil {
+		return nil, err
+	}
+
+	return &pb.WorkSpacesByDirsResponse{DirectoryCount: uint32(len(allocations)), Allocations: allocations}, nil
 }
 
 func (s *Server) GetCapacitySpace(ctx context.Context, in *pb.WorkSpaceRequest) (*pb.WorkSpaceResponse, error) {
@@ -335,6 +446,42 @@ func (s *Server) getWorkSpaceInfo(sid string) (engine.WorkSpaceInfo, error) {
 	}
 	logging.CPrint(logging.ERROR, "cannot find space by spaceID", logging.LogFormat{"sid": sid})
 	return engine.WorkSpaceInfo{}, status.New(ErrAPIMinerSpaceNotFound, ErrCode[ErrAPIMinerSpaceNotFound]).Err()
+}
+
+func workSpaceInfos2ProtoAllocation(dir string, wsiList []engine.WorkSpaceInfo) (*pb.WorkSpacesByDirsResponse_Allocation, error) {
+	spaceList := make([]*pb.WorkSpace, len(wsiList))
+	totalMiB := big.NewInt(0)
+	for i, wsi := range wsiList {
+		result, err := workSpaceInfo2ProtoWorkSpace(wsi)
+		if err != nil {
+			return nil, err
+		}
+		spaceList[i] = result
+		totalMiB.Add(totalMiB, big.NewInt(int64(poc.BitLengthDiskSize[wsi.BitLength])/poc.MiB))
+	}
+	alloc := &pb.WorkSpacesByDirsResponse_Allocation{
+		Directory:  dir,
+		Capacity:   totalMiB.Text(10),
+		SpaceCount: uint32(len(spaceList)),
+		Spaces:     spaceList,
+	}
+	return alloc, nil
+}
+
+func (s *Server) getCapacitySpacesByDirs() ([]*pb.WorkSpacesByDirsResponse_Allocation, error) {
+	dirs, infos, err := s.spaceKeeper.WorkSpaceInfosByDirs()
+	if err != nil {
+		logging.CPrint(logging.ERROR, "fail to get spaceKeeper WorkSpaceInfos by dirs", logging.LogFormat{"err": err})
+		return nil, status.New(ErrAPIMinerInternal, ErrCode[ErrAPIMinerInternal]).Err()
+	}
+	allocs := make([]*pb.WorkSpacesByDirsResponse_Allocation, len(dirs))
+	for i := range dirs {
+		allocs[i], err = workSpaceInfos2ProtoAllocation(dirs[i], infos[i])
+		if err != nil {
+			return nil, err
+		}
+	}
+	return allocs, nil
 }
 
 func (s *Server) getCapacitySpace(sid string) (*pb.WorkSpace, error) {

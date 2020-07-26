@@ -6,6 +6,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/shirou/gopsutil/disk"
 	"google.golang.org/grpc/status"
 	"massnet.org/mass/blockchain"
 	"massnet.org/mass/consensus"
@@ -240,7 +241,6 @@ func checkBlockIDLen(id string) error {
 	return nil
 }
 
-
 func checkMinerDiskSize(sk mining.SpaceKeeper, requiredMiBytes uint64) error {
 	var requiredBytes = requiredMiBytes * poc.MiB
 	if requiredBytes < uint64(poc.MinDiskSize) {
@@ -251,6 +251,21 @@ func checkMinerDiskSize(sk mining.SpaceKeeper, requiredMiBytes uint64) error {
 		return status.New(ErrAPIMinerInternal, err.Error()).Err()
 	}
 	if requiredBytes > availableBytes {
+		return status.New(ErrAPIMinerInvalidCapacity, "capacity should be on larger than available disk size").Err()
+	}
+	return nil
+}
+
+func checkPathDiskSize(path string, requiredMiBytes uint64) error {
+	var requiredBytes = requiredMiBytes * poc.MiB
+	if requiredBytes < uint64(poc.MinDiskSize) {
+		return status.New(ErrAPIMinerInvalidCapacity, "capacity should be no less than 96 MiB").Err()
+	}
+	usage, err := disk.Usage(path)
+	if err != nil {
+		return status.New(ErrAPIMinerInternal, err.Error()).Err()
+	}
+	if requiredBytes > usage.Free {
 		return status.New(ErrAPIMinerInvalidCapacity, "capacity should be on larger than available disk size").Err()
 	}
 	return nil

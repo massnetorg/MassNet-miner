@@ -27,4 +27,6 @@ var (
 	ErrConfigUnderSizeTarget = errors.New("target disk size is smaller than lower bound")
 	ErrOSDiskSizeNotEnough   = errors.New("os disk size is not enough")
 	ErrInvalidRequiredBytes  = errors.New("required disk size in bytes is not valid")
+	ErrConfigInvalidPathSize = errors.New("target path and size is not matched")
+	ErrInvalidDir            = errors.New("invalid directory")
 )

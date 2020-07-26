@@ -65,6 +65,8 @@ Alternatively, check `./api/proto/api.swagger.json` directly for full definition
 - spaces
   * [ConfigureCapacity](#configurecapacity)
   * [GetCapacitySpaces](#getcapacityspaces)
+  * [ConfigureCapacityByDirs](#configurecapacitybydirs)
+  * [GetCapacitySpacesByDirs](#getcapacityspacesbydirs)
   * [GetCapacitySpace](#getcapacityspace)
   * [PlotCapacitySpaces](#plotcapacityspaces)
   * [PlotCapacitySpace](#plotcapacityspace)
@@ -875,6 +877,179 @@ null
             "bit_length": 24,
             "state": "registered",
             "progress": 0
+        }
+    ],
+    "error_code": 0,
+    "error_message": ""
+}
+```
+
+---
+
+#### ConfigureCapacityByDirs
+    POST /v1/spaces/directory
+It is to configure miner by required directories and corresponding disk sizes.
+##### Parameters
+| Parameter | Type | Attribute | Usage | Note |
+| :----: | :----: | :----: | ------ | ------|
+| allocations | []struct | required | consists of directory and capacity | |
+| directory | string | required | directory to save MassDBs | path should be existed |
+| capacity | int | required | mining disk size for corresponding directory | represented by MiB |
+| payout_addresses | []string | required | array of payout addresses | |
+| passphrase | string | required | passphrase to unlock wallet | same as what -P argument set |
+- `Array of Object`, `allocations`
+    - `String` - `directory`
+    - `Int` - `capacity`
+- `Array of String`, `payout_addresses`
+- `String` - `passphrase`
+##### Returns
+- `Integer` - `directory_count`
+- `Array of Object`, `allocations`
+    - `String` - `directory`
+    - `String` - `capacity`
+    - `Integer` - `space_count` 
+    - `Array of Object`, `spaces`
+        - `Integer` - `ordinal`
+        - `String` - `public_key`
+        - `String` - `address`
+        - `Integer` - `bit_length`
+        - `String` - `state`
+        - `Float` - `progress`
+- `Integer` - `error_code`
+- `String` - `error_message`
+##### Example
+**request**
+```json
+{
+    "allocations": [
+        {
+            "directory": "spaces1",
+            "capacity": 100
+        },
+        {
+            "directory": "spaces2",
+            "capacity": 200
+        }
+    ],
+    "payout_addresses": [
+        "ms1qqamtl9nd8x38plenkgdzecpvsfuaqw3szhglhffcxler0jmsd840sueckv0"
+    ],
+    "passphrase": "123456"
+}
+```
+**response**
+```json
+{
+    "directory_count": 2,
+    "allocations": [
+        {
+            "directory": "/root/spaces1",
+            "capacity": "96",
+            "space_count": 1,
+            "spaces": [
+                {
+                    "ordinal": "0",
+                    "public_key": "032d5465c60bf7e43b96b39f77fa433a2c083e055860e50d332b279f0e78fb336d",
+                    "address": "181zD466dKPEDFebeVXG7uJwKsjnbXTCtv",
+                    "bit_length": 24,
+                    "state": "mining",
+                    "progress": 100
+                }
+            ]
+        },
+        {
+            "directory": "/root/spaces2",
+            "capacity": "192",
+            "space_count": 2,
+            "spaces": [
+                {
+                    "ordinal": "1",
+                    "public_key": "03d18ce607b80af663da3e47ce7b7b53a068d56dfc95603e57ee87616a9894c2b9",
+                    "address": "1KZg1RfPL9GkQoN6yFcC2R6N8HfQrUGAcv",
+                    "bit_length": 24,
+                    "state": "mining",
+                    "progress": 100
+                },
+                {
+                    "ordinal": "2",
+                    "public_key": "02eb0aefdc273a5083b3bf03b21bdd1159479e6eedc4d5c7a41595229d43f6d45f",
+                    "address": "1Mvn6yva8q9Le5eKCU7pR3G1ryYqY7oCVP",
+                    "bit_length": 24,
+                    "state": "mining",
+                    "progress": 100
+                }
+            ]
+        }
+    ],
+    "error_code": 0,
+    "error_message": ""
+}
+```
+
+---
+
+#### GetCapacitySpacesByDirs
+    GET /v1/spaces/directory
+It is to get all configured miner spaces.
+##### Parameters
+null
+##### Returns
+- `Integer` - `directory_count`
+- `Array of Object`, `allocations`
+    - `String` - `directory`
+    - `String` - `capacity`
+    - `Integer` - `space_count` 
+    - `Array of Object`, `spaces`
+        - `Integer` - `ordinal`
+        - `String` - `public_key`
+        - `String` - `address`
+        - `Integer` - `bit_length`
+        - `String` - `state`
+        - `Float` - `progress`
+- `Integer` - `error_code`
+- `String` - `error_message`
+##### Example
+```json
+{
+    "directory_count": 2,
+    "allocations": [
+        {
+            "directory": "/root/spaces1",
+            "capacity": "96",
+            "space_count": 1,
+            "spaces": [
+                {
+                    "ordinal": "0",
+                    "public_key": "032d5465c60bf7e43b96b39f77fa433a2c083e055860e50d332b279f0e78fb336d",
+                    "address": "181zD466dKPEDFebeVXG7uJwKsjnbXTCtv",
+                    "bit_length": 24,
+                    "state": "mining",
+                    "progress": 100
+                }
+            ]
+        },
+        {
+            "directory": "/root/spaces2",
+            "capacity": "192",
+            "space_count": 2,
+            "spaces": [
+                {
+                    "ordinal": "1",
+                    "public_key": "03d18ce607b80af663da3e47ce7b7b53a068d56dfc95603e57ee87616a9894c2b9",
+                    "address": "1KZg1RfPL9GkQoN6yFcC2R6N8HfQrUGAcv",
+                    "bit_length": 24,
+                    "state": "mining",
+                    "progress": 100
+                },
+                {
+                    "ordinal": "2",
+                    "public_key": "02eb0aefdc273a5083b3bf03b21bdd1159479e6eedc4d5c7a41595229d43f6d45f",
+                    "address": "1Mvn6yva8q9Le5eKCU7pR3G1ryYqY7oCVP",
+                    "bit_length": 24,
+                    "state": "mining",
+                    "progress": 100
+                }
+            ]
         }
     ],
     "error_code": 0,

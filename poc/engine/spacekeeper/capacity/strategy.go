@@ -44,6 +44,7 @@ func NewSpaceKeeperV1(args ...interface{}) (spacekeeper.SpaceKeeper, error) {
 		dbType:                typeMassDBV1,
 		wallet:                poCWallet,
 		workSpaceIndex:        make([]*WorkSpaceMap, 0),
+		workSpacePaths:        make(map[string]*WorkSpacePath),
 		workSpaceList:         make([]*WorkSpace, 0),
 		queue:                 newPlotterQueue(),
 		newQueuedWorkSpaceCh:  make(chan *queuedWorkSpace, plotterMaxChanSize),
@@ -78,7 +79,7 @@ func NewSpaceKeeperV1(args ...interface{}) (spacekeeper.SpaceKeeper, error) {
 			configureMethod = "ConfigureByBitLength"
 		} else {
 			wsiList, err = sk.ConfigureByFlags(engine.SFAll, cfg.Miner.Plot, cfg.Miner.Generate)
-			if err != nil {
+			if err != nil && err != ErrSpaceKeeperConfiguredNothing {
 				return nil, err
 			}
 			configureMethod = "ConfigureByFlags"
@@ -132,6 +133,7 @@ func generateInitialIndex(sk *SpaceKeeper, dbType, regStrB, suffixB string) erro
 			dbIndex, pubKey, bitLength, err := parseMassDBArgsFromString(args[0], args[1], args[2])
 			if err != nil {
 				logging.CPrint(logging.ERROR, "cannot parse MassDB args from filename", logging.LogFormat{"filepath": filePath, "err": err})
+				continue
 			}
 
 			// verify db ordinal
@@ -154,7 +156,7 @@ func generateInitialIndex(sk *SpaceKeeper, dbType, regStrB, suffixB string) erro
 			ws, err := NewWorkSpace(dbType, dbDir, int64(ordinal), pubKey, bitLength)
 			if err != nil {
 				logging.CPrint(logging.WARN, "fail on NewWorkSpace",
-					logging.LogFormat{"filepath": filePath, "err": err})
+					logging.LogFormat{"filepath": filePath, "err": err, "db_index": dbIndex})
 				continue
 			}
 
@@ -227,23 +229,28 @@ func prepareDirs(dirs []string) ([]string, [][]os.FileInfo) {
 	resultDir := make([]string, 0)
 	resultDirFileInfo := make([][]os.FileInfo, 0)
 	for _, dir := range dirs {
-		if fi, err := os.Stat(dir); err != nil {
+		absDir, err := filepath.Abs(dir)
+		if err != nil {
+			logging.CPrint(logging.ERROR, "fail to get abs path", logging.LogFormat{"err": err, "dir": dir})
+			continue
+		}
+		if fi, err := os.Stat(absDir); err != nil {
 			if !os.IsNotExist(err) {
 				logging.CPrint(logging.ERROR, "fail to get file stat", logging.LogFormat{"err": err})
 				continue
 			}
-			if err = os.MkdirAll(dir, 0700); err != nil {
-				logging.CPrint(logging.ERROR, "mkdir failed", logging.LogFormat{"dir": dir, "err": err})
+			if err = os.MkdirAll(absDir, 0700); err != nil {
+				logging.CPrint(logging.ERROR, "mkdir failed", logging.LogFormat{"dir": absDir, "err": err})
 				continue
 			}
 		} else if !fi.IsDir() {
-			logging.CPrint(logging.ERROR, "not directory", logging.LogFormat{"dir": dir})
+			logging.CPrint(logging.ERROR, "not directory", logging.LogFormat{"dir": absDir})
 			continue
 		}
-		if fis, err := ioutil.ReadDir(dir); err != nil {
-			logging.CPrint(logging.ERROR, "fail to read dir", logging.LogFormat{"err": err, "dir": dir})
+		if fis, err := ioutil.ReadDir(absDir); err != nil {
+			logging.CPrint(logging.ERROR, "fail to read dir", logging.LogFormat{"err": err, "dir": absDir})
 		} else {
-			resultDir = append(resultDir, dir)
+			resultDir = append(resultDir, absDir)
 			resultDirFileInfo = append(resultDirFileInfo, fis)
 		}
 	}

@@ -1,5 +1,3 @@
-// For more details about plasterer, see https://github.com/massnetorg/plasterer
-
 package capacity
 
 import (
@@ -27,6 +25,7 @@ func NewSpaceKeeperPlasterer(args ...interface{}) (spacekeeper.SpaceKeeper, erro
 		dbType:                typeMassDBV1,
 		wallet:                poCWallet,
 		workSpaceIndex:        make([]*WorkSpaceMap, 0),
+		workSpacePaths:        make(map[string]*WorkSpacePath),
 		workSpaceList:         make([]*WorkSpace, 0),
 		queue:                 newPlotterQueue(),
 		newQueuedWorkSpaceCh:  make(chan *queuedWorkSpace, plotterMaxChanSize),
