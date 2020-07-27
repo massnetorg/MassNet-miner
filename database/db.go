@@ -42,6 +42,7 @@ type Db interface {
 	// RollbackClose discards the recent database changes to the previously
 	// saved data at last Sync and closes the database.
 	RollbackClose() (err error)
+	Rollback()
 
 	// Sync verifies that the database is coherent on disk and no
 	// outstanding transactions are in flight.
@@ -53,7 +54,7 @@ type Db interface {
 	// InitByGenesisBlock init database by setting genesis block
 	InitByGenesisBlock(block *massutil.Block) (err error)
 
-	// InsertBlock inserts raw block and transaction data from a block
+	// SubmitBlock inserts raw block and transaction data from a block
 	// into the database.  The first block inserted into the database
 	// will be treated as the genesis block.  Every subsequent block insert
 	// requires the referenced parent block to already exist.
@@ -84,11 +85,17 @@ type Db interface {
 	// block chain.
 	FetchBlockShaByHeight(height uint64) (sha *wire.Hash, err error)
 
+	FetchBlockLocByHeight(height uint64) (*BlockLoc, error)
+
 	// ExistsTxSha returns whether or not the given tx hash is present in
 	// the database
 	ExistsTxSha(sha *wire.Hash) (exists bool, err error)
 
 	FetchTxByLoc(blkHeight uint64, txOff int, txLen int) (*wire.MsgTx, error)
+
+	// FetchTxByFileLoc returns transactions saved in file, including
+	// those revoked with chain reorganization, for file is in APPEND mode.
+	FetchTxByFileLoc(blkLoc *BlockLoc, txLoc *wire.TxLoc) (*wire.MsgTx, error)
 
 	// FetchTxBySha returns some data for the given transaction hash. The
 	// implementation may cache the underlying data if desired.
@@ -123,14 +130,13 @@ type Db interface {
 	// which can be used to detect errors.
 	FetchUnSpentTxByShaList(txShaList []*wire.Hash) []*TxReply
 
-	// fetch a rank of reward addresses
-	FetchRankStakingTx(height uint64) ([]Rank, error)
+	// FetchUnexpiredStakingRank returns only currently unexpired staking rank at
+	// target height. This function is for mining and validating block.
+	FetchUnexpiredStakingRank(height uint64, onlyOnList bool) ([]Rank, error)
 
-	// fetch detail info of reward adresses
-	FetchRewardStakingTx(height uint64) ([]Reward, uint32, error)
-
-	// fetch detail info of all staking tx
-	FetchInStakingTx(height uint64) ([]Reward, uint32, error)
+	// FetchStakingRank returns staking rank at any height. This
+	// function may be slow.
+	FetchStakingRank(height uint64, onlyOnList bool) ([]Rank, error)
 
 	// fetch a map of all staking transactions in database
 	FetchStakingTxMap() (StakingNodes, error)
@@ -184,7 +190,7 @@ type Db interface {
 	DeleteAddrIndex(hash *wire.Hash, height uint64) (err error)
 
 	// FetchScriptHashRelatedTx  returns all relevant txhash mapped by block height
-	FetchScriptHashRelatedTx(scriptHashes [][]byte, startBlock, stopBlock uint64, chainParams *config.Params) (map[uint64][]*wire.TxLoc, error)
+	FetchScriptHashRelatedTx(scriptHashes [][]byte, startBlock, stopBlock uint64) (map[uint64][]*wire.TxLoc, error)
 
 	CheckScriptHashUsed(scriptHash []byte) (bool, error)
 
@@ -368,4 +374,12 @@ type AddrIndexData struct {
 type BLHeight struct {
 	BitLength int
 	BlkHeight uint64
+}
+
+type BlockLoc struct {
+	Height uint64
+	Hash   wire.Hash
+	File   uint32
+	Offset uint64
+	Length uint64
 }

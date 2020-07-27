@@ -248,14 +248,21 @@ func (chain *Blockchain) getReorganizeNodes(node *BlockNode) (*list.List, *list.
 // connectBlock handles connecting the passed node/block to the end of the main
 // (best) chain.
 // TODO: perform benchmark test here
-func (chain *Blockchain) connectBlock(node *BlockNode, block *massutil.Block) error {
+func (chain *Blockchain) connectBlock(node *BlockNode, block *massutil.Block) (err error) {
+
+	defer func() {
+		if err != nil {
+			chain.db.Rollback()
+		}
+	}()
 	// Make sure it's extending the end of the best chain.
 	prevHash := &block.MsgBlock().Header.Previous
 	if !prevHash.IsEqual(chain.blockTree.bestBlockNode().Hash) {
 		return errConnectMainChain
 	}
 
-	txInputStore, err := chain.fetchInputTransactions(node, block)
+	var txInputStore TxStore
+	txInputStore, err = chain.fetchInputTransactions(node, block)
 	if err != nil {
 		return err
 	}
@@ -456,6 +463,7 @@ func (chain *Blockchain) connectBestChain(node *BlockNode, block *massutil.Block
 		// Connect the block to the main chain.
 		chain.l.Lock()
 		defer chain.l.Unlock()
+
 		if err = chain.connectBlock(node, block); err != nil {
 			return err
 		}

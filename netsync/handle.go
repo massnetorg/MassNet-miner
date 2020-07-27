@@ -3,6 +3,7 @@ package netsync
 import (
 	"reflect"
 
+	cmn "github.com/massnetorg/tendermint/tmlibs/common"
 	"massnet.org/mass/blockchain"
 	"massnet.org/mass/config"
 	"massnet.org/mass/consensus"
@@ -11,7 +12,6 @@ import (
 	"massnet.org/mass/massutil"
 	"massnet.org/mass/p2p"
 	"massnet.org/mass/wire"
-	cmn "github.com/massnetorg/tendermint/tmlibs/common"
 )
 
 const (
@@ -369,7 +369,11 @@ func (sm *SyncManager) handleTransactionMsg(peer *peer, msg *TransactionMessage)
 	}
 
 	if isOrphan, err := sm.chain.ProcessTx(tx); err != nil && !isOrphan {
-		if err == errors.ErrTxAlreadyExists {
+		if err == errors.ErrTxAlreadyExists ||
+			(!sm.IsCaughtUp() &&
+				(err == blockchain.ErrImmatureSpend ||
+					err == blockchain.ErrBindingInputMissing ||
+					err == blockchain.ErrSequenceNotSatisfied)) {
 			return
 		}
 		logging.CPrint(logging.ERROR, "process tx fail", logging.LogFormat{"err": err, "txid": tx.Hash().String()})

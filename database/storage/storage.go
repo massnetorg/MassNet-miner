@@ -8,28 +8,37 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+)
 
-	"massnet.org/mass/database"
+const (
+	// StorageV1
+	//		- initial
+	StorageV1 int32 = 1 + iota
+	// StorageV2
+	//		- record bitlength associated with poc pk
+	StorageV2
+	// StorageV3
+	//		- since 1.1.0
+	//		- save blocks to disk
+	StorageV3
+
+	CurrentStorageVersion int32 = StorageV3
 )
 
 const (
 	KiB = 1024
 	MiB = KiB * 1024
 	GiB = MiB * 1024
-
-	// CurrentStorageVersion is the database version.
-	CurrentStorageVersion int32 = 2
 )
 
 var (
-	ErrDbUnknownType      = errors.New("non-existent database type")
-	ErrInvalidKey         = errors.New("invalid key")
-	ErrInvalidValue       = errors.New("invalid value")
-	ErrInvalidBatch       = errors.New("invalid batch")
-	ErrInvalidArgument    = errors.New("invalid argument")
-	ErrNotFound           = errors.New("not found")
-	ErrUnsupportedVersion = errors.New("unsupported version")
-	ErrUpgradeRequired    = errors.New("storage need upgrade")
+	ErrDbUnknownType       = errors.New("non-existent database type")
+	ErrInvalidKey          = errors.New("invalid key")
+	ErrInvalidValue        = errors.New("invalid value")
+	ErrInvalidBatch        = errors.New("invalid batch")
+	ErrInvalidArgument     = errors.New("invalid argument")
+	ErrNotFound            = errors.New("not found")
+	ErrIncompatibleStorage = errors.New("incompatible storage")
 )
 
 // Range is a key range.
@@ -194,41 +203,41 @@ func ReadVersion(path string) (string, int32, error) {
 	return ver.Dbtype, ver.Version, nil
 }
 
-func CheckVersion(dbtype, storPath string, create bool) error {
+func CheckCompatibility(dbtype, storPath string) error {
 	verFile := filepath.Join(storPath, ".ver")
-	if create {
-		fo, err := os.Create(verFile)
-		if err != nil {
-			return fmt.Errorf("create ver file error: %v", err)
-		}
-		defer fo.Close()
+	fs, err := os.Stat(verFile)
+	if err != nil {
+		if os.IsNotExist(err) {
+			file, err := os.Create(verFile)
+			if err != nil {
+				return err
+			}
+			defer file.Close()
 
-		b, err := json.Marshal(storageVersion{
-			Dbtype:  dbtype,
-			Version: CurrentStorageVersion,
-		})
-		if err != nil {
-			return fmt.Errorf("marshal failed: %v", err)
+			data, err := json.Marshal(storageVersion{
+				Dbtype:  dbtype,
+				Version: CurrentStorageVersion,
+			})
+			if err != nil {
+				return fmt.Errorf("marshal failed: %v", err)
+			}
+			return binary.Write(file, binary.LittleEndian, data)
 		}
-		return binary.Write(fo, binary.LittleEndian, b)
+		return err
+	}
+	if fs.IsDir() {
+		return fmt.Errorf("directory %s already exists", verFile)
 	}
 
 	// open
-	fi, err := os.Open(verFile)
-	if os.IsNotExist(err) {
-		return database.ErrDbDoesNotExist
-	}
+	file, err := os.Open(verFile)
 	if err != nil {
 		return err
 	}
-	defer fi.Close()
+	defer file.Close()
 
-	fs, err := fi.Stat()
-	if err != nil {
-		return err
-	}
 	buf := make([]byte, fs.Size())
-	err = binary.Read(fi, binary.LittleEndian, buf)
+	err = binary.Read(file, binary.LittleEndian, buf)
 	if err != nil {
 		return fmt.Errorf("read version file error: %v", err)
 	}
@@ -242,8 +251,5 @@ func CheckVersion(dbtype, storPath string, create bool) error {
 	if ver.Version == CurrentStorageVersion && ver.Dbtype == dbtype {
 		return nil
 	}
-	if ver.Version > CurrentStorageVersion || ver.Dbtype != dbtype {
-		return ErrUnsupportedVersion
-	}
-	return ErrUpgradeRequired
+	return ErrIncompatibleStorage
 }

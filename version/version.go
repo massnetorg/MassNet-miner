@@ -4,8 +4,8 @@ import "fmt"
 
 const (
 	majorVersion uint32 = 1
-	minorVersion uint32 = 0
-	patchVersion uint32 = 3
+	minorVersion uint32 = 1
+	patchVersion uint32 = 0
 )
 
 var (

@@ -457,7 +457,7 @@ func getReward(stakingTxStore database.StakingNodes, height uint64) ([]database.
 		}
 	}
 
-	SortedStakingTx, err := database.SortMapByValue(txList, height, true)
+	SortedStakingTx, err := database.SortMap(txList, height, true)
 	if err != nil {
 		return nil, err
 	}
@@ -467,6 +467,7 @@ func getReward(stakingTxStore database.StakingNodes, height uint64) ([]database.
 	for i := 0; i < count; i++ {
 		reward[i].ScriptHash = SortedStakingTx[i].Key
 		reward[i].Value = SortedStakingTx[i].Value
+		reward[i].Weight = SortedStakingTx[i].Weight
 
 	}
 	return reward, nil
@@ -488,7 +489,7 @@ func (chain *Blockchain) fetchStakingTxStore(node *BlockNode) ([]database.Rank, 
 	// spent transactions in the results.  This is a little more efficient
 	// since it means less transaction lookups are needed.
 	if chain.blockTree.bestBlockNode() == nil || (prevNode != nil && prevNode.Hash.IsEqual(chain.blockTree.bestBlockNode().Hash)) {
-		stakingTxRank, err := chain.db.FetchRankStakingTx(node.Height)
+		stakingTxRank, err := chain.db.FetchUnexpiredStakingRank(node.Height, true)
 		if err != nil {
 			return nil, err
 		}

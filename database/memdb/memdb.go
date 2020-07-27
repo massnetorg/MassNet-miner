@@ -29,7 +29,7 @@ func NewMemDb() (database.Db, error) {
 	if err != nil {
 		return nil, err
 	}
-	return ldb.NewChainDb(stor)
+	return ldb.NewChainDb("./blocks", stor)
 }
 
 func newMemStorage() (store dbstorage.Storage, err error) {

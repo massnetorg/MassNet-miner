@@ -3,11 +3,15 @@ package ldb
 import (
 	"encoding/binary"
 	"math"
+	"os"
+	"path/filepath"
 	"sync"
 
 	"massnet.org/mass/database"
+	"massnet.org/mass/database/disk"
 	"massnet.org/mass/database/storage"
 	_ "massnet.org/mass/database/storage/ldbstorage"
+	"massnet.org/mass/errors"
 	"massnet.org/mass/logging"
 	"massnet.org/mass/wire"
 )
@@ -52,7 +56,8 @@ type ChainDb struct {
 	// lock preventing multiple entry
 	dbLock sync.Mutex
 
-	stor storage.Storage
+	stor          storage.Storage
+	blkFileKeeper *disk.BlockFileKeeper
 
 	dbBatch       storage.Batch
 	batches       [dbBatchCount]*LBatch
@@ -83,7 +88,7 @@ func init() {
 				if err != nil {
 					return nil, err
 				}
-				return NewChainDb(stor)
+				return NewChainDb(dbpath, stor)
 			},
 			OpenDB: func(args ...interface{}) (database.Db, error) {
 				if len(args) < 1 {
@@ -98,13 +103,13 @@ func init() {
 				if err != nil {
 					return nil, err
 				}
-				return NewChainDb(stor)
+				return NewChainDb(dbpath, stor)
 			},
 		})
 	}
 }
 
-func NewChainDb(stor storage.Storage) (*ChainDb, error) {
+func NewChainDb(dbpath string, stor storage.Storage) (*ChainDb, error) {
 	cdb := &ChainDb{
 		stor:                stor,
 		dbBatch:             stor.NewBatch(),
@@ -122,9 +127,9 @@ func NewChainDb(stor storage.Storage) (*ChainDb, error) {
 		blockMeta = dbStorageMeta{
 			currentHeight: UnknownHeight,
 		}
-		if err = cdb.stor.Put(dbStorageMetaDataKey, encodeDBStorageMetaData(blockMeta)); err != nil {
-			return nil, err
-		}
+		// if err = cdb.stor.Put(dbStorageMetaDataKey, encodeDBStorageMetaData(blockMeta)); err != nil {
+		// 	return nil, err
+		// }
 	}
 	cdb.dbStorageMeta = blockMeta
 
@@ -142,6 +147,33 @@ func NewChainDb(stor storage.Storage) (*ChainDb, error) {
 		}
 	}
 
+	// init or load blkXXXXX.dat
+	blkDir := filepath.Join(filepath.Dir(dbpath), "blocks")
+	fi, err := os.Stat(blkDir)
+	if err != nil {
+		if !os.IsNotExist(err) {
+			return nil, err
+		}
+		err = os.MkdirAll(blkDir, 0755)
+		if err != nil {
+			return nil, err
+		}
+	} else if !fi.IsDir() {
+		return nil, errors.New("file already exist: " + blkDir)
+	}
+	records, err := cdb.getAllBlockFileMeta()
+	if err != nil {
+		return nil, err
+	}
+	if len(records) == 0 {
+		file0, err := cdb.initBlockFileMeta()
+		if err != nil {
+			logging.CPrint(logging.ERROR, "init block file meta failed", logging.LogFormat{"err": err})
+			return nil, err
+		}
+		records = append(records, file0)
+	}
+	cdb.blkFileKeeper = disk.NewBlockFileKeeper(blkDir, records)
 	return cdb, nil
 }
 
@@ -160,7 +192,7 @@ func (db *ChainDb) Sync() error {
 
 // Close cleanly shuts down database, syncing all data.
 func (db *ChainDb) Close() error {
-
+	db.blkFileKeeper.Close()
 	return db.close()
 }
 
@@ -429,10 +461,6 @@ func makeBlockShaKey(sha *wire.Hash) []byte {
 var recordSuffixTx = []byte("TXD")
 var recordSuffixSpentTx = []byte("TXS")
 
-// stakingTx
-var recordStakingTx = []byte("TXL")
-var recordExpiredStakingTx = []byte("TXU")
-
 func shaTxToKey(sha *wire.Hash) []byte {
 	key := make([]byte, len(recordSuffixTx)+len(sha))
 	copy(key, recordSuffixTx)
@@ -461,14 +489,6 @@ func (db *ChainDb) Batch(index int) *LBatch {
 		db.batches[index] = NewLBatch(db.dbBatch)
 	}
 	return db.batches[index]
-}
-
-// RollbackClose this is part of the database.Db interface and should discard
-// recent changes to the db and the close the db.  This currently just does
-// a clean shutdown.
-func (db *ChainDb) RollbackClose() error {
-
-	return db.close()
 }
 
 // For testing purpose

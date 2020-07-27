@@ -2,11 +2,19 @@ package ldb_test
 
 import (
 	"math/rand"
+	"os"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 	"massnet.org/mass/database/ldb"
+	"massnet.org/mass/debug"
 )
+
+func TestMain(m *testing.M) {
+	// Disable DevMode to make sure TestPubkblRecords works as expected.
+	debug.DisableDevMode()
+	os.Exit(m.Run())
+}
 
 func TestPubkblRecords(t *testing.T) {
 	db, tearDown, err := GetDb("DbTest")

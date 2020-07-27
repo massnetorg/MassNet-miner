@@ -3,16 +3,21 @@ package ldb
 import (
 	"crypto/sha256"
 	"encoding/binary"
+	"sort"
 
 	"golang.org/x/crypto/ripemd160"
-	"massnet.org/mass/config"
 	"massnet.org/mass/database"
 	"massnet.org/mass/database/storage"
+	"massnet.org/mass/logging"
 	"massnet.org/mass/wire"
 )
 
 const (
 	addrIndexCurrentVersion = 1
+
+	htsBoundaryDistance = 32
+	stlBoundaryDistance = 16
+	stlBitmapMask       = (0x01 << stlBoundaryDistance) - 1
 )
 
 var (
@@ -22,47 +27,38 @@ var (
 	// as big endian in version 1 and little endian in the original code. Version
 	// is stored as two bytes, little endian (to match all the code but the index).
 	addrIndexVersionKey = []byte("ADDRINDEXVERSION")
-	txIndexPrefix       = []byte("STL")
-	shIndexPrefix       = []byte("HTS")
-	// txIndexKeyLen = len(txIndexPrefix) + len(scriptHash) + len(height) + len(txOffset) + len(txLen)
-	txIndexKeyLen = 3 + sha256.Size + 8 + 4 + 4
-	// txIndexSearchKeyLen = len(txIndexPrefix) + len(scriptHash) + len(height)
-	txIndexSearchKeyLen = 3 + sha256.Size + 8
-	usedSearchKeyLen    = 3 + sha256.Size
-	txIndexDeleteKeyLen = 3 + sha256.Size + 8
+
+	//  | key prefix | script hash | lower boundary |      |       bitmap      | index  |  count  | tx offset | tx length | (4 + 4) x N | index  |  count  | tx offset | tx length | (4 + 4) x N |
+	//   ------------------------------------------- -----> ---------------------------------------------------------------------------------------------------------------------
+	//  |   3 bytes  |  32 bytes   |     8 bytes    |      |  4 bytes [31...0] | 1 byte | 2 bytes |  4 bytes  |  4 bytes  |     ...     | 1 byte | 2 bytes |  4 bytes  |  4 bytes  |     ...     |
+	//
+	//  <lower boundary> = height / 32 * 32    ---  BigEndian
+	//  bitmap |= 0x01 << (height - <lower boundary>)
+	txIndexPrefix = []byte("STL")
+
+	//  | key prefix | lower boundary | script hash |      |       bitmap      |
+	//   ------------------------------------------- -----> -------------------
+	//  |  3 bytes   |    8 bytes     |   32 bytes  |      |  4 bytes [31...0] |
+	shIndexPrefix = []byte("HTS")
+
+	// txIndexKeyLen = len(txIndexPrefix) + len(scriptHash)
+	usedSearchKeyLen = 3 + sha256.Size
+	// txIndexKeyLen = len(txIndexPrefix) + len(scriptHash) + len(lower boundary)
+	txIndexKeyLen = 3 + sha256.Size + 8
+	// at least one wire.TxLoc
+	minTxIndexValueLen = 4 + 1 + 2 + 4 + 4
+
 	shIndexKeyLen       = 3 + 8 + sha256.Size
 	shIndexSearchKeyLen = 3 + 8
 	blankData           []byte
 )
 
-type txIndex struct {
-	scriptHash [sha256.Size]byte
-	blkHeight  uint64
-	txOffset   uint32
-	txLen      uint32
+func calcHTSLowBoundary(blkHeight uint64) uint64 {
+	return blkHeight / htsBoundaryDistance * htsBoundaryDistance
 }
 
-type shIndex struct {
-	blkHeight  uint64
-	scriptHash [sha256.Size]byte
-}
-
-func txIndexToKey(txIndex *txIndex) []byte {
-	key := make([]byte, txIndexKeyLen)
-	copy(key, txIndexPrefix)
-	copy(key[3:35], txIndex.scriptHash[:])
-	binary.BigEndian.PutUint64(key[35:43], txIndex.blkHeight)
-	binary.LittleEndian.PutUint32(key[43:47], txIndex.txOffset)
-	binary.LittleEndian.PutUint32(key[47:51], txIndex.txLen)
-	return key
-}
-
-func txIndexSearchKey(scriptHash [sha256.Size]byte, blkHeight uint64) []byte {
-	key := make([]byte, txIndexSearchKeyLen)
-	copy(key, txIndexPrefix)
-	copy(key[3:35], scriptHash[:])
-	binary.BigEndian.PutUint64(key[35:43], blkHeight)
-	return key
+func calcSTLLowBoundary(blkHeight uint64) uint64 {
+	return blkHeight / stlBoundaryDistance * stlBoundaryDistance
 }
 
 func usedSearchKey(scriptHash [sha256.Size]byte) []byte {
@@ -72,27 +68,98 @@ func usedSearchKey(scriptHash [sha256.Size]byte) []byte {
 	return key
 }
 
-func txIndexDeleteKey(scriptHash [sha256.Size]byte, blkHeight uint64) []byte {
-	key := make([]byte, txIndexDeleteKeyLen)
+func encodeHTSKey(blkHeight uint64, scriptHash [sha256.Size]byte) (key []byte, lowBound uint64) {
+	lowBound = calcHTSLowBoundary(blkHeight)
+	key = make([]byte, shIndexKeyLen)
+	copy(key, shIndexPrefix)
+	binary.BigEndian.PutUint64(key[3:11], lowBound) // We use BigEndian here.
+	copy(key[11:43], scriptHash[:])
+	return
+}
+
+func encodeHTSSearchKeyPrefix(blkHeight uint64) (prefix []byte, lowBound uint64) {
+	lowBound = calcHTSLowBoundary(blkHeight)
+	prefix = make([]byte, shIndexSearchKeyLen)
+	copy(prefix, shIndexPrefix)
+	binary.BigEndian.PutUint64(prefix[3:11], lowBound)
+	return
+}
+
+func encodeSTLKey(blkHeight uint64, scriptHash [sha256.Size]byte) (key []byte, lowBound uint64) {
+	lowBound = calcSTLLowBoundary(blkHeight)
+	key = make([]byte, txIndexKeyLen)
 	copy(key, txIndexPrefix)
 	copy(key[3:35], scriptHash[:])
-	binary.BigEndian.PutUint64(key[35:43], blkHeight)
-	return key
+	binary.BigEndian.PutUint64(key[35:43], lowBound) // We use BigEndian here.
+	return
 }
 
-func shIndexToKey(shIndex *shIndex) []byte {
-	key := make([]byte, shIndexKeyLen)
-	copy(key, shIndexPrefix)
-	binary.LittleEndian.PutUint64(key[3:11], shIndex.blkHeight)
-	copy(key[11:43], shIndex.scriptHash[:])
-	return key
-}
+func parseSTLValue(boundary uint64, data []byte) (map[uint64][]*wire.TxLoc, error) {
 
-func shIndexSearchKey(blkHeight uint64) []byte {
-	key := make([]byte, shIndexSearchKeyLen)
-	copy(key, shIndexPrefix)
-	binary.LittleEndian.PutUint64(key[3:11], blkHeight)
-	return key
+	result := make(map[uint64][]*wire.TxLoc)
+
+	bitmap := binary.LittleEndian.Uint32(data[0:4]) & stlBitmapMask
+	dataLen := len(data)
+	if bitmap == 0 || dataLen < minTxIndexValueLen {
+		logging.CPrint(logging.ERROR, "unexpected invalid data",
+			logging.LogFormat{
+				"boundary":     boundary,
+				"bitmap":       bitmap,
+				"value_length": dataLen,
+			})
+		return nil, ErrIncorrectDbData
+	}
+
+	cur := 4 // bitmap
+	shift := 0
+	for bitmap != 0 && shift < stlBoundaryDistance {
+		if bitmap&0x01 != 0 {
+			index := data[cur]
+			if shift != int(index) {
+				logging.CPrint(logging.ERROR, "unexpected stl index",
+					logging.LogFormat{
+						"boundary": boundary,
+						"index":    index,
+						"shift":    shift,
+						"cur":      cur,
+					})
+				return nil, ErrIncorrectDbData
+			}
+			count := binary.LittleEndian.Uint16(data[cur+1 : cur+3])
+			cur += 3
+			if dataLen < cur+int(count)*8 || count == 0 {
+				logging.CPrint(logging.ERROR, "unexpected illegal stl value",
+					logging.LogFormat{
+						"boundary":     boundary,
+						"count":        count,
+						"value_length": dataLen,
+						"cur":          cur,
+					})
+				return nil, ErrIncorrectDbData
+			}
+			height := boundary + uint64(shift)
+			for i := 0; i < int(count); i++ {
+				txloc := &wire.TxLoc{
+					TxStart: int(binary.LittleEndian.Uint32(data[cur : cur+4])),
+					TxLen:   int(binary.LittleEndian.Uint32(data[cur+4 : cur+8])),
+				}
+				result[height] = append(result[height], txloc)
+				cur += 8
+			}
+		}
+		shift++
+		bitmap >>= 1
+	}
+	if cur != dataLen {
+		logging.CPrint(logging.ERROR, "unexpected cur",
+			logging.LogFormat{
+				"boundary":     boundary,
+				"cur":          cur,
+				"value_length": dataLen,
+			})
+		return nil, ErrIncorrectDbData
+	}
+	return result, nil
 }
 
 func (db *ChainDb) SubmitAddrIndex(hash *wire.Hash, height uint64, addrIndexData *database.AddrIndexData) error {
@@ -121,22 +188,109 @@ func (db *ChainDb) submitAddrIndex(height uint64, addrIndexData *database.AddrIn
 
 	txAddrIndex, btxAddrIndex, gtxSpentIndex := addrIndexData.TxIndex, addrIndexData.BindingTxIndex, addrIndexData.BindingTxSpentIndex
 
-	// get and update the height||sh -> []byte and sh||blkHeigtht||txOffset||txLen -> []byte   key-value
 	for addrKey, indexes := range txAddrIndex {
-		txShIndex := &shIndex{blkHeight: height, scriptHash: addrKey}
-		key := shIndexToKey(txShIndex)
-		batch.Put(key, blankData)
-		//heightToScriptHash = append(heightToScriptHash, &shIndex{blkHeight: blkHeight, scriptHash: addrKey})
-		for _, index := range indexes {
-			txIndexKey := &txIndex{
-				scriptHash: addrKey,
-				blkHeight:  height,
-				txOffset:   uint32(index.TxStart),
-				txLen:      uint32(index.TxLen),
+		if len(indexes) == 0 {
+			continue
+		}
+		// put or update "HTS"
+		htsBitmap := uint32(0)
+		htsKey, htsLowBound := encodeHTSKey(height, addrKey)
+		htsOldValue, err := db.stor.Get(htsKey)
+		if err != nil {
+			if err != storage.ErrNotFound {
+				return err
 			}
-			// The index is stored purely in the key.
-			packedIndex := txIndexToKey(txIndexKey)
-			batch.Put(packedIndex, blankData)
+		} else {
+			htsBitmap = binary.LittleEndian.Uint32(htsOldValue)
+		}
+		htsBit := uint32(0x01) << int(height-htsLowBound)
+		if htsBitmap&htsBit == 0 {
+			htsBitmap |= htsBit
+			newValue := make([]byte, 4)
+			binary.LittleEndian.PutUint32(newValue, htsBitmap)
+			batch.Put(htsKey, newValue)
+		} else {
+			logging.CPrint(logging.ERROR, "hts bitmap should be unset",
+				logging.LogFormat{
+					"height":   height,
+					"boundary": htsLowBound,
+				})
+			return ErrIncorrectDbData
+		}
+
+		// put or update "STL"
+		stlBitmap := uint32(0)
+		stlKey, stlLowBound := encodeSTLKey(height, addrKey)
+		stlOldValue, err := db.stor.Get(stlKey)
+		if err != nil {
+			if err != storage.ErrNotFound {
+				return err
+			}
+		} else {
+			stlBitmap = binary.LittleEndian.Uint32(stlOldValue[0:4])
+		}
+		shiftN := int(height - stlLowBound)
+		if stlBitmap&(0x01<<shiftN) != 0 {
+			logging.CPrint(logging.ERROR, "stl bitmap should not be set",
+				logging.LogFormat{
+					"height":   height,
+					"boundary": stlLowBound,
+				})
+			return ErrIncorrectDbData
+		}
+
+		// find where to put current TxLoc if old value exists.
+		target := 0
+		if len(stlOldValue) > 0 {
+			target = 4 // bitmap length
+			for i := 0; i < shiftN; i++ {
+				if stlBitmap&(0x01<<i) != 0 {
+					index := stlOldValue[target]
+					if int(index) != i {
+						logging.CPrint(logging.ERROR, "unexpected index", logging.LogFormat{
+							"height":  height,
+							"shift_i": i,
+							"index":   index,
+						})
+						return ErrIncorrectDbData
+					}
+					N := binary.LittleEndian.Uint16(stlOldValue[target+1 : target+3])
+					target += 3 + 8*int(N) // 1+2+8*N
+				}
+			}
+		}
+
+		// serialize TxLoc
+		sort.Slice(indexes, func(i, j int) bool {
+			return indexes[i].TxStart < indexes[j].TxStart
+		})
+		N := len(indexes)
+		bufLen := 3 + 8*N // 1+2+8*N
+		buf := make([]byte, bufLen)
+		buf[0] = byte(shiftN)                              // put index
+		binary.LittleEndian.PutUint16(buf[1:3], uint16(N)) // put count
+		start := 3
+		for _, index := range indexes {
+			binary.LittleEndian.PutUint32(buf[start:start+4], uint32(index.TxStart)) // offset
+			binary.LittleEndian.PutUint32(buf[start+4:start+8], uint32(index.TxLen)) // length
+			start += 8
+		}
+		stlBitmap |= 0x01 << shiftN // set bitmap
+
+		var stlNewValue []byte
+		if target == 0 {
+			stlNewValue = make([]byte, 4+bufLen)
+			binary.LittleEndian.PutUint32(stlNewValue[0:4], stlBitmap)
+			copy(stlNewValue[4:], buf)
+		} else {
+			stlNewValue = make([]byte, len(stlOldValue)+bufLen)
+			binary.LittleEndian.PutUint32(stlNewValue[0:4], stlBitmap)
+			copy(stlNewValue[4:], stlOldValue[4:target])
+			copy(stlNewValue[target:target+bufLen], buf)
+			copy(stlNewValue[target+bufLen:], stlOldValue[target:])
+		}
+		if err = batch.Put(stlKey, stlNewValue); err != nil {
+			return err
 		}
 	}
 
@@ -259,25 +413,82 @@ func (db *ChainDb) deleteAddrIndex(height uint64) error {
 	var batch = db.Batch(addrIndexBatch).Batch()
 
 	// delete txIndex and txShIndex
-	shPrefix := shIndexSearchKey(height)
+	shPrefix, htsLowBound := encodeHTSSearchKeyPrefix(height)
+	htsBit := uint32(0x01) << (height - htsLowBound)
 
 	iter := db.stor.NewIterator(storage.BytesPrefix(shPrefix))
 	defer iter.Release()
 	for iter.Next() {
-		var scriptHash [sha256.Size]byte
-		shIndexKey := iter.Key()
-		copy(scriptHash[:], shIndexKey[11:])
-		deletePrefix := txIndexDeleteKey(scriptHash, height)
-		txIter := db.stor.NewIterator(storage.BytesPrefix(deletePrefix))
-		for txIter.Next() {
-			txIndexKey := txIter.Key()
-			batch.Delete(txIndexKey)
+		key := iter.Key()
+		value := iter.Value()
+
+		// delete "HTS"
+		bitmap := binary.LittleEndian.Uint32(value)
+		if bitmap&htsBit == 0 {
+			continue
 		}
-		txIter.Release()
-		if err := txIter.Error(); err != nil {
+		bitmap &= ^htsBit
+		if bitmap == 0 {
+			batch.Delete(key)
+		} else {
+			buf := make([]byte, 4)
+			binary.LittleEndian.PutUint32(buf, bitmap)
+			batch.Put(key, buf)
+		}
+
+		// delete "STL"
+		var scriptHash [sha256.Size]byte
+		copy(scriptHash[:], key[11:43])
+		stlKey, stlLowBound := encodeSTLKey(height, scriptHash)
+		stlOldValue, err := db.stor.Get(stlKey)
+		if err != nil || len(stlOldValue) < minTxIndexValueLen {
+			logging.CPrint(logging.ERROR, "unexpected error",
+				logging.LogFormat{
+					"err":          err,
+					"height":       height,
+					"value_length": len(stlOldValue),
+				})
 			return err
 		}
-		batch.Delete(shIndexKey)
+
+		shiftN := height - stlLowBound
+		stlBit := uint32(0x01) << shiftN
+		stlBitmap := binary.LittleEndian.Uint32(stlOldValue[0:4])
+		if stlBitmap&stlBit == 0 {
+			logging.CPrint(logging.ERROR, "unexpected stl bitmap unset", logging.LogFormat{"height": height})
+			return ErrIncorrectDbData
+		}
+
+		end := 4 // bitmap
+		lastSkip := 0
+		for i := 0; i <= int(shiftN); i++ {
+			if stlBitmap&(0x01<<i) != 0 {
+				index := stlOldValue[end]
+				if int(index) != i {
+					logging.CPrint(logging.ERROR, "unexpected index", logging.LogFormat{
+						"height":  height,
+						"shift_i": i,
+						"index":   index,
+					})
+					return ErrIncorrectDbData
+				}
+				N := binary.LittleEndian.Uint16(stlOldValue[end+1 : end+3])
+				lastSkip = 3 + 8*int(N) // 1+2+8*N
+				end += lastSkip
+			}
+		}
+
+		stlBitmap &= ^stlBit
+		if stlBitmap&stlBitmapMask == 0 {
+			// delete when empty
+			batch.Delete(stlKey)
+			continue
+		}
+		stlNewValue := make([]byte, len(stlOldValue)-lastSkip)
+		binary.LittleEndian.PutUint32(stlNewValue, stlBitmap)
+		copy(stlNewValue[4:end-lastSkip], stlOldValue[4:end-lastSkip])
+		copy(stlNewValue[end-lastSkip:], stlOldValue[end:])
+		batch.Put(stlKey, stlNewValue)
 	}
 	if err := iter.Error(); err != nil {
 		return err
@@ -346,40 +557,56 @@ func (db *ChainDb) deleteAddrIndex(height uint64) error {
 }
 
 // from start to stop-1
-func (db *ChainDb) FetchScriptHashRelatedTx(scriptHashes [][]byte, startBlock, stopBlock uint64,
-	chainParams *config.Params) (map[uint64][]*wire.TxLoc, error) {
-	allTx := make(map[[16]byte]struct{})
-	result := make(map[uint64][]*wire.TxLoc)
+func (db *ChainDb) FetchScriptHashRelatedTx(
+	scriptHashes [][]byte,
+	startBlock, stopBlock uint64,
+) (map[uint64][]*wire.TxLoc, error) {
+
+	lowBoundary, upBoundary := calcSTLLowBoundary(startBlock), calcSTLLowBoundary(stopBlock-1)
+
+	dedup := make(map[uint64]map[wire.TxLoc]struct{})
 	for _, v := range scriptHashes {
 		var scriptHash [sha256.Size]byte
-		if len(v) != sha256.Size {
-			return nil, ErrWrongScriptHashLength
-		}
 		copy(scriptHash[:], v)
-		start := txIndexSearchKey(scriptHash, startBlock)
-		end := txIndexSearchKey(scriptHash, stopBlock)
-		// interval [startBlock, stopBlock) stopBlock not include
-		iter := db.stor.NewIterator(&storage.Range{Start: start, Limit: end})
-		for iter.Next() {
-			key := iter.Key()
-			var txLoc [16]byte
-			copy(txLoc[:], key[35:])
-			if _, ok := allTx[txLoc]; !ok {
-				allTx[txLoc] = struct{}{}
+		for curBoundary := lowBoundary; curBoundary <= upBoundary; curBoundary += stlBoundaryDistance {
+			key, _ := encodeSTLKey(curBoundary, scriptHash)
+			value, err := db.stor.Get(key)
+			if err != nil {
+				if err == storage.ErrNotFound {
+					continue
+				}
+				return nil, err
+			}
+			heightToList, err := parseSTLValue(curBoundary, value)
+			if err != nil {
+				return nil, err
+			}
+			for height, list := range heightToList {
+				if height < startBlock || height >= stopBlock {
+					continue
+				}
+				m, ok := dedup[height]
+				if !ok {
+					m = make(map[wire.TxLoc]struct{})
+					dedup[height] = m
+				}
+				for _, loc := range list {
+					m[*loc] = struct{}{}
+				}
 			}
 		}
-		iter.Release()
-
-		if err := iter.Error(); err != nil {
-			return nil, err
-		}
 	}
-	for tx := range allTx {
-		height := binary.BigEndian.Uint64(tx[:8])
-		txOffset := binary.LittleEndian.Uint32(tx[8:12])
-		txLen := binary.LittleEndian.Uint32(tx[12:])
-		txLoc := &wire.TxLoc{TxStart: int(txOffset), TxLen: int(txLen)}
-		result[height] = append(result[height], txLoc)
+	result := make(map[uint64][]*wire.TxLoc)
+	for height, locs := range dedup {
+		slice := make([]*wire.TxLoc, 0, len(locs))
+		for loc := range locs {
+			locCopy := loc
+			slice = append(slice, &locCopy)
+		}
+		sort.Slice(slice, func(i, j int) bool {
+			return slice[i].TxStart < slice[j].TxStart
+		})
+		result[height] = slice
 	}
 	return result, nil
 }

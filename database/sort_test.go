@@ -28,93 +28,106 @@ func TestSortMapByValue(t *testing.T) {
 		scriptHash1: {
 			{
 				Value:        1000,
-				FrozenPeriod: 1000,
-				BlkHeight:    101,
+				FrozenPeriod: 10000,
+				BlkHeight:    590101,
 			},
 			{
 				Value:        1000,
-				FrozenPeriod: 1000,
-				BlkHeight:    201,
+				FrozenPeriod: 10000,
+				BlkHeight:    590201,
 			},
 			{
 				Value:        2000,
-				FrozenPeriod: 1000,
-				BlkHeight:    401,
+				FrozenPeriod: 10000,
+				BlkHeight:    590401,
 			},
 		},
 		scriptHash2: {
 			{
 				Value:        1000,
-				FrozenPeriod: 1000,
-				BlkHeight:    101,
+				FrozenPeriod: 10000,
+				BlkHeight:    590101,
 			},
 			{
 				Value:        1000,
-				FrozenPeriod: 1000,
-				BlkHeight:    201,
+				FrozenPeriod: 10000,
+				BlkHeight:    590201,
 			},
 			{
-				Value:        2000,
-				FrozenPeriod: 1000,
-				BlkHeight:    401,
+				Value:        1000,
+				FrozenPeriod: 20000,
+				BlkHeight:    590401,
 			},
 		},
 		scriptHash3: {
 			{
 				Value:        1000,
-				FrozenPeriod: 1000,
-				BlkHeight:    101,
+				FrozenPeriod: 10000,
+				BlkHeight:    590101,
 			},
 			{
 				Value:        1000,
-				FrozenPeriod: 1000,
-				BlkHeight:    201,
+				FrozenPeriod: 9900,
+				BlkHeight:    590201,
 			},
 			{
 				Value:        2000,
-				FrozenPeriod: 1000,
-				BlkHeight:    501,
+				FrozenPeriod: 10000,
+				BlkHeight:    590501,
 			},
 		},
 		scriptHash4: {
 			{
 				Value:        1000,
-				FrozenPeriod: 1000,
-				BlkHeight:    101,
+				FrozenPeriod: 10000,
+				BlkHeight:    590101,
 			},
 			{
 				Value:        1000,
-				FrozenPeriod: 1000,
-				BlkHeight:    201,
+				FrozenPeriod: 10000,
+				BlkHeight:    590201,
 			},
 			{
 				Value:        2000,
-				FrozenPeriod: 1000,
-				BlkHeight:    501,
+				FrozenPeriod: 10000,
+				BlkHeight:    590501,
 			},
 		},
 		scriptHash5: {
 			{
 				Value:        1000,
-				FrozenPeriod: 1000,
-				BlkHeight:    101,
+				FrozenPeriod: 10000,
+				BlkHeight:    590101,
 			},
 			{
 				Value:        1000,
-				FrozenPeriod: 1000,
-				BlkHeight:    201,
+				FrozenPeriod: 10000,
+				BlkHeight:    590201,
 			},
 			{
 				Value:        2000,
-				FrozenPeriod: 1000,
-				BlkHeight:    401,
+				FrozenPeriod: 1474561,
+				BlkHeight:    590401,
 			},
 		},
 	}
-	pairs, err := SortMapByValue(tests, 900, true)
+	pairs, err := SortMap(tests, 590602, true)
 	if err != nil {
 		t.Fatalf("failed to sort, %v", err)
 	}
+	t.Log(1)
+	for _, pair := range pairs {
+		t.Logf("key: %v", pair.Key)
+		t.Logf("value: %v", pair.Value)
+		t.Logf("weight: %v", pair.Weight)
+		t.Logf("")
+	}
+
+	pairs, err = SortMap(tests, 600002, true)
+	if err != nil {
+		t.Fatalf("failed to sort, %v", err)
+	}
+	t.Log(2)
 	for _, pair := range pairs {
 		t.Logf("key: %v", pair.Key)
 		t.Logf("value: %v", pair.Value)

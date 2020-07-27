@@ -88,7 +88,7 @@ var (
 
 	// LockTime
 	ErrSequenceNotSatisfied = errors.New("transaction's sequence locks on inputs not met")
-	ErrImmatureSpend        = errors.New("tried to spend the transaction before required maturity")
+	ErrImmatureSpend        = errors.New("try to spend immature coins")
 	ErrUnfinalizedTx        = errors.New("transaction is not finalized")
 	errUnFinalizedTx        = errors.New("block contains unFinalized transaction")
 

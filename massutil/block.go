@@ -26,6 +26,7 @@ type Block struct {
 	transactions          []*Tx          // Transactions
 	txsGenerated          bool           // ALL wrapped transactions generated
 	size                  uint64         // Plain block size
+	txLocs                []wire.TxLoc
 }
 
 // MsgBlock returns the underlying wire.MsgBlock for the Block.
@@ -173,6 +174,9 @@ func (b *Block) TxHash(txNum int) (*wire.Hash, error) {
 // It is used to allow fast indexing into transactions within the raw byte
 // stream.
 func (b *Block) TxLoc() ([]wire.TxLoc, error) {
+	if b.txLocs != nil {
+		return b.txLocs, nil
+	}
 	rawMsg, err := b.Bytes(wire.DB)
 	if err != nil {
 		return nil, err
@@ -180,11 +184,20 @@ func (b *Block) TxLoc() ([]wire.TxLoc, error) {
 	rBuf := bytes.NewBuffer(rawMsg)
 
 	var mBlock = wire.NewEmptyMsgBlock()
-	txLocs, err := mBlock.DeserializeTxLoc(rBuf)
+	b.txLocs, err = mBlock.DeserializeTxLoc(rBuf)
 	if err != nil {
 		return nil, err
 	}
-	return txLocs, err
+	return b.txLocs, err
+}
+
+func (b *Block) SetSerializedBlockDB(data []byte) {
+	b.serializedBlockDB = data
+}
+
+func (b *Block) ResetGenerated() {
+	b.txsGenerated = false
+	b.transactions = nil
 }
 
 // Height returns the saved height of the block in the block chain.  This value

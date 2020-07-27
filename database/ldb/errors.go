@@ -3,8 +3,10 @@ package ldb
 import "massnet.org/mass/errors"
 
 var (
-	ErrWrongScriptHashLength = errors.New("length of script hash error")
-	ErrBindingIndexBroken    = errors.New("binding transaction index was broken")
+	ErrWrongScriptHashLength  = errors.New("length of script hash error")
+	ErrBindingIndexBroken     = errors.New("binding transaction index was broken")
+	ErrIncorrectDbData        = errors.New("incorrect db data")
+	ErrCheckStakingDuplicated = errors.New("duplicated staking")
 
 	// errors for submit.go
 	ErrPreBatchNotReady    = errors.New("previous batch is not ready")
@@ -19,4 +21,9 @@ var (
 	ErrWrongBindingShIndexPrefix      = errors.New("prefix of binding sh index is invalid")
 	ErrWrongBindingTxSpentIndexLen    = errors.New("length of binding tx spent index is invalid")
 	ErrWrongBindingTxSpentIndexPrefix = errors.New("prefix of binding tx spent index is invalid")
+
+	// for disk file
+	ErrInvalidBlockFileMeta = errors.New("invalid blockfile meta")
+	ErrIncorrectValueLength = errors.New("incorrect value length")
+	ErrIncorrectValue       = errors.New("incorrect value")
 )

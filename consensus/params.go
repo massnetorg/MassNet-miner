@@ -23,6 +23,9 @@ const (
 
 	defaultMinFrozenPeriod uint64 = 61440
 	defaultMinStakingValue uint64 = 2048 * MaxwellPerMass
+
+	Massip1Activation uint64 = 694000
+	MaxValidPeriod           = defaultMinFrozenPeriod * 24 // 1474560
 )
 
 var (

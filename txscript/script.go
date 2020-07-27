@@ -12,6 +12,10 @@ import (
 	"massnet.org/mass/wire"
 )
 
+var (
+	zeroHash wire.Hash
+)
+
 // isSmallInt returns whether or not the opcode is considered a small integer,
 // which is an OP_0, or OP_1 through OP_16.
 func isSmallInt(op *opcode) bool {
@@ -417,14 +421,11 @@ func calcWitnessSignatureHash(subScript []parsedOpcode, sigHashes *TxSigHashes,
 	var sigHash bytes.Buffer
 
 	// First write out, then encode the transaction's version number.
-	var bVersion [4]byte
-	binary.LittleEndian.PutUint32(bVersion[:], uint32(tx.Version))
-	sigHash.Write(bVersion[:])
+	sigHash.Write(sigHashes.TxVersion[:])
 
 	// Next write out the possibly pre-calculated hashes for the sequence
 	// numbers of all inputs, and the hashes of the previous outs for all
 	// outputs.
-	var zeroHash wire.Hash
 
 	// If anyone can pay isn't active, then we can use the cached
 	// hashPrevOuts, otherwise we just write zeroes for the prev outs.
@@ -470,9 +471,7 @@ func calcWitnessSignatureHash(subScript []parsedOpcode, sigHashes *TxSigHashes,
 	var bSequence [8]byte
 	binary.LittleEndian.PutUint64(bSequence[:], txIn.Sequence)
 	sigHash.Write(bSequence[:])
-	var bPayload = make([]byte, len(tx.Payload))
-	copy(bPayload, tx.Payload)
-	sigHash.Write(bPayload)
+	sigHash.Write(tx.Payload)
 	// If the current signature mode isn't single, or none, then we can
 	// re-use the pre-generated hashoutputs sighash fragment. Otherwise,
 	// we'll serialize and add only the target output index to the signature
@@ -490,9 +489,7 @@ func calcWitnessSignatureHash(subScript []parsedOpcode, sigHashes *TxSigHashes,
 
 	// Finally, write out the transaction's locktime, and the sig hash
 	// type.
-	var bLockTime [8]byte
-	binary.LittleEndian.PutUint64(bLockTime[:], tx.LockTime)
-	sigHash.Write(bLockTime[:])
+	sigHash.Write(sigHashes.TxLockTime[:])
 	var bHashType [4]byte
 	binary.LittleEndian.PutUint32(bHashType[:], uint32(hashType))
 	sigHash.Write(bHashType[:])
