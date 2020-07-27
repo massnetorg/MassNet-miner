@@ -16,6 +16,7 @@ type BlockFileKeeper struct {
 
 	lastBlockFile uint32
 	blockFiles    []*BlockFile
+	closed        bool
 }
 
 func NewBlockFileKeeper(dir string, records [][]byte) *BlockFileKeeper {
@@ -23,6 +24,7 @@ func NewBlockFileKeeper(dir string, records [][]byte) *BlockFileKeeper {
 		flatFileSeq:   NewFlatFileSeq(dir, "blk", BlockfileChunkSize),
 		blockFiles:    make([]*BlockFile, len(records)),
 		lastBlockFile: uint32(len(records) - 1),
+		closed:        false,
 	}
 	for i, data := range records {
 		readonly := i < len(records)-1
@@ -67,7 +69,7 @@ func (b *BlockFileKeeper) Close() {
 		}
 		bf.Close()
 	}
-	b.lastBlockFile = 0
+	b.closed = true
 }
 
 func (b *BlockFileKeeper) flushBlockFile(finalize bool) {
@@ -91,6 +93,11 @@ func (b *BlockFileKeeper) CommitRecentChange() {
 func (b *BlockFileKeeper) SaveRawBlockToDisk(rawBlk []byte, height uint64, timestamp int64) (file *BlockFile, offset int64, err error) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
+
+	if b.closed {
+		return nil, 0, ErrClosed
+	}
+
 	if len(rawBlk) == 0 {
 		return nil, 0, nil
 	}

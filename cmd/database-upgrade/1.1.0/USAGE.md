@@ -21,3 +21,9 @@ The build output is `./bin/mass-db-upgrade-1.1.0`
 ./mass-db-upgrade-1.1.0 upgrade [db_dir]
 ```
 `[db_dir]` is the actual value of option `db.data_dir`.
+
+### Step 4 Check (Optional)
+```bash
+./mass-db-upgrade-1.1.0 check [db_dir]
+```
+`[db_dir]` is the actual value of option `db.data_dir`.

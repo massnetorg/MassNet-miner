@@ -19,6 +19,7 @@ var (
 	ErrReadBrokenBlock       = errors.New("read broken block")
 	ErrReadBrokenData        = errors.New("read broken data")
 	ErrFileOutOfRange        = errors.New("file out of range")
+	ErrClosed                = errors.New("file writer closed")
 )
 
 var (
