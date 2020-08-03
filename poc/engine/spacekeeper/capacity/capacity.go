@@ -526,6 +526,36 @@ func (sk *SpaceKeeper) AvailableDiskSize() uint64 {
 	return info.Free
 }
 
+// IsCapacityAvailable returns nil if given path is able to hold capacityBytes size of spaces.
+func (sk *SpaceKeeper) IsCapacityAvailable(path string, capacityBytes uint64) error {
+	if path == "" {
+		path = sk.dbDirs[0]
+	}
+	absPath, err := filepath.Abs(path)
+	if err != nil {
+		return err
+	}
+
+	info, err := disk.Usage(absPath)
+	if err != nil {
+		return err
+	}
+	freeBytes := info.Free
+
+	var plottedBytes uint64
+	if p, ok := sk.workSpacePaths[absPath]; ok {
+		for _, ws := range p.spaces {
+			if ws.state == engine.Ready || ws.state == engine.Mining {
+				plottedBytes += uint64(poc.BitLengthDiskSize[ws.BitLength()])
+			}
+		}
+	}
+	if freeBytes+plottedBytes < capacityBytes {
+		return ErrOSDiskSizeNotEnough
+	}
+	return nil
+}
+
 // TODO: consider more check items
 func checkOSDiskSizeByPath(path string, requiredBytes int) error {
 	if requiredBytes < 0 {

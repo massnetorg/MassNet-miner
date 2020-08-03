@@ -156,7 +156,7 @@ func (s *Server) ConfigureCapacityByDirs(ctx context.Context, in *pb.ConfigureSp
 			logging.CPrint(logging.ERROR, "not directory", logging.LogFormat{"dir": absDir})
 			return nil, status.New(ErrAPIMinerInvalidAllocation, ErrCode[ErrAPIMinerInvalidAllocation]).Err()
 		}
-		if err = checkPathDiskSize(absDir, alloc.Capacity); err != nil {
+		if err = checkMinerPathCapacity(s.spaceKeeper, absDir, alloc.Capacity); err != nil {
 			logging.CPrint(logging.ERROR, "invalid capacity size",
 				logging.LogFormat{"err": err, "capacity": alloc.Capacity, "directory": absDir})
 			return nil, err

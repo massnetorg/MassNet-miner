@@ -271,6 +271,11 @@ func checkPathDiskSize(path string, requiredMiBytes uint64) error {
 	return nil
 }
 
+func checkMinerPathCapacity(sk mining.SpaceKeeper, path string, requiredMiBytes uint64) error {
+	var requiredBytes = requiredMiBytes * poc.MiB
+	return sk.IsCapacityAvailable(path, requiredBytes)
+}
+
 func generateReqID() int {
 	return rand.Intn(1000000)
 }

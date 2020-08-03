@@ -17,6 +17,7 @@ type SpaceKeeper interface {
 	ConfigureBySize(targetSize uint64, execPlot, execMine bool) ([]engine.WorkSpaceInfo, error)
 	ConfigureByPath(paths []string, sizes []uint64, execPlot, execMine bool) ([]engine.WorkSpaceInfo, error)
 	AvailableDiskSize() (uint64, error)
+	IsCapacityAvailable(path string, capacity uint64) error
 	WorkSpaceInfosByDirs() (dirs []string, results [][]engine.WorkSpaceInfo, err error)
 }
 
@@ -74,6 +75,15 @@ func (csk *ConfigurableSpaceKeeper) AvailableDiskSize() (uint64, error) {
 		return 0, err
 	}
 	return sk.AvailableDiskSize(), nil
+}
+
+func (csk *ConfigurableSpaceKeeper) IsCapacityAvailable(path string, capacity uint64) error {
+	sk, err := getInstance(csk.SpaceKeeper)
+	if err != nil {
+		logging.CPrint(logging.ERROR, "fail to assert SpaceKeeper type", logging.LogFormat{"actual": reflect.TypeOf(sk)})
+		return err
+	}
+	return sk.IsCapacityAvailable(path, capacity)
 }
 
 func (csk *ConfigurableSpaceKeeper) WorkSpaceInfosByDirs() (dirs []string, results [][]engine.WorkSpaceInfo, err error) {
