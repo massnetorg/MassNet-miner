@@ -542,14 +542,22 @@ func (sk *SpaceKeeper) IsCapacityAvailable(path string, capacityBytes uint64) er
 	}
 	freeBytes := info.Free
 
-	var plottedBytes uint64
+	var wsiList []engine.WorkSpaceInfo
 	if p, ok := sk.workSpacePaths[absPath]; ok {
 		for _, ws := range p.spaces {
-			if ws.state == engine.Ready || ws.state == engine.Mining {
-				plottedBytes += uint64(poc.BitLengthDiskSize[ws.BitLength()])
-			}
+			wsiList = append(wsiList, ws.Info())
+		}
+	} else if wsiList, err = peekMassDBInfosByDir(absPath, sk.dbType); err != nil {
+		return err
+	}
+
+	var plottedBytes uint64
+	for _, wsi := range wsiList {
+		if wsi.State == engine.Ready || wsi.State == engine.Mining {
+			plottedBytes += uint64(poc.BitLengthDiskSize[wsi.BitLength])
 		}
 	}
+
 	if freeBytes+plottedBytes < capacityBytes {
 		return ErrOSDiskSizeNotEnough
 	}

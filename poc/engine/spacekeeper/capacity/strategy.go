@@ -28,6 +28,11 @@ const (
 	TypeSpaceKeeperV1 = "spacekeeper.v1"
 )
 
+var (
+	dbType2RegStr  = map[string]string{typeMassDBV1: regMassDBV1}
+	dbType2SuffixB = map[string]string{typeMassDBV1: suffixMassDBV1}
+)
+
 // NewSpaceKeeperV1
 func NewSpaceKeeperV1(args ...interface{}) (spacekeeper.SpaceKeeper, error) {
 	cfg, poCWallet, err := parseArgs(args...)
@@ -283,6 +288,42 @@ func parseMassDBArgsFromString(ordinalStr, pkStr, blStr string) (ordinal int, pu
 	}
 
 	return
+}
+
+func peekMassDBInfosByDir(dbDir, dbType string) ([]engine.WorkSpaceInfo, error) {
+	regStrB, suffixB := dbType2RegStr[dbType], dbType2SuffixB[dbType]
+	regExpB, err := regexp.Compile(regStrB)
+	if err != nil {
+		return nil, err
+	}
+	dirFileInfos, err := ioutil.ReadDir(dbDir)
+	if err != nil {
+		return nil, err
+	}
+	var wsiList []engine.WorkSpaceInfo
+	for _, fi := range dirFileInfos {
+		fileName := fi.Name()
+		// try match suffix and `ordinal_pubKey_bitLength.suffix`
+		if !strings.HasSuffix(strings.ToUpper(fileName), suffixB) || !regExpB.MatchString(strings.ToUpper(fileName)) {
+			continue
+		}
+
+		// extract args
+		args := strings.Split(fileName[:len(fileName)-len(suffixB)], "_")
+		dbIndex, pubKey, bitLength, err := parseMassDBArgsFromString(args[0], args[1], args[2])
+		if err != nil {
+			continue
+		}
+
+		// NewWorkSpace
+		ws, err := NewWorkSpace(dbType, dbDir, int64(dbIndex), pubKey, bitLength)
+		if err != nil {
+			continue
+		}
+		wsiList = append(wsiList, ws.Info())
+		ws.Close()
+	}
+	return wsiList, nil
 }
 
 func init() {
