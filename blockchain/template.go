@@ -696,8 +696,8 @@ func newBlockTemplate(chain *Blockchain, payoutAddress massutil.Address, templat
 		for _, proposal := range proposals {
 			if totalProposalsSize+proposal.Size <= PriorityProposalSize {
 				totalProposalsSize += proposal.Size
-				punishProposals = append(punishProposals, proposal.Proposal)
-				banList = append(banList, proposal.Proposal.PubKey)
+				punishProposals = append(punishProposals, proposal.FaultPubKey)
+				banList = append(banList, proposal.PubKey)
 			}
 		}
 	} else {

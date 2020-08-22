@@ -1,157 +1,150 @@
 package blockchain
 
 import (
-	"bytes"
-	"sort"
+	"container/list"
+	"encoding/hex"
 	"sync"
 
 	"massnet.org/mass/massutil"
+	"massnet.org/mass/pocec"
 	"massnet.org/mass/wire"
 )
 
-type PunishmentProposal struct {
-	Size      int
-	BitLength int
-	Height    uint64
-	Proposal  *wire.FaultPubKey
-}
-
-func (punishment *PunishmentProposal) LessThan(other *PunishmentProposal) bool {
-	if punishment.BitLength < other.BitLength {
-		return true
-	} else if punishment.BitLength == other.BitLength {
-		if punishment.Height > other.Height {
-			return true
-		} else if punishment.Height == other.Height {
-			return punishment.Size > other.Size
-		} else {
-			return false
-		}
-	} else {
-		return false
-	}
-}
-
-func (punishment *PunishmentProposal) SetFromFaultPk(fpk *wire.FaultPubKey) *PunishmentProposal {
-	punishment.Proposal = fpk
-	punishment.Size = fpk.PlainSize()
-	punishment.BitLength = fpk.Testimony[0].Proof.BitLength
-	punishment.Height = fpk.Testimony[0].Height
-
-	return punishment
-}
-
-type PunishmentProposalList []*PunishmentProposal
-
-func (fpkList PunishmentProposalList) Len() int {
-	return len(fpkList)
-}
-
-func (fpkList PunishmentProposalList) Less(i, j int) bool {
-	return fpkList[i].LessThan(fpkList[j])
-}
-
-func (fpkList PunishmentProposalList) Swap(i, j int) {
-	fpkList[i], fpkList[j] = fpkList[j], fpkList[i]
-}
-
-func sortPunishmentProposals(punishmentList PunishmentProposalList) {
-	sort.Sort(sort.Reverse(punishmentList))
-}
-
 type ProposalPool struct {
 	sync.RWMutex
-	punishmentProposalList []*PunishmentProposal
+	punishments *punishmentProposalList
 }
 
-func NewProposalPool(fpkList []*wire.FaultPubKey) *ProposalPool {
-	PunishProposals := make([]*PunishmentProposal, len(fpkList))
-
-	for i, fpk := range fpkList {
-		tpp := new(PunishmentProposal)
-		tpp.SetFromFaultPk(fpk)
-		PunishProposals[i] = tpp
-	}
-	sortPunishmentProposals(PunishProposals)
-
+func NewProposalPool(faults []*wire.FaultPubKey) *ProposalPool {
 	return &ProposalPool{
-		punishmentProposalList: PunishProposals,
-	}
-}
-
-func (pp *ProposalPool) PunishmentProposals() []*PunishmentProposal {
-	return pp.punishmentProposalList
-}
-
-func (pp *ProposalPool) insertFaultPubKey(fpk *wire.FaultPubKey) {
-	punishment := new(PunishmentProposal)
-	punishment.SetFromFaultPk(fpk)
-
-	var insert = func(tpp *PunishmentProposal, i int) {
-		pp.punishmentProposalList = append(pp.punishmentProposalList[:i+1], pp.punishmentProposalList[i:]...)
-		pp.punishmentProposalList[i] = tpp
-	}
-
-	var inserted bool
-	for i, elmt := range pp.punishmentProposalList {
-		if elmt.LessThan(punishment) {
-			insert(punishment, i)
-			inserted = true
-			break
-		}
-	}
-	if !inserted {
-		pp.punishmentProposalList = append(pp.punishmentProposalList, punishment)
-	}
-}
-
-func (pp *ProposalPool) InsertFaultPubKey(fpk *wire.FaultPubKey) {
-	pp.insertFaultPubKey(fpk)
-}
-
-func (pp *ProposalPool) insertFaultPubKeys(fpkList []*wire.FaultPubKey) {
-	for _, fpk := range fpkList {
-		pp.insertFaultPubKey(fpk)
-	}
-}
-
-func (pp *ProposalPool) removeFaultPubKey(fpk *wire.FaultPubKey) {
-	fpkBytes := fpk.PubKey.SerializeCompressed()
-	fpkBitLength := fpk.Testimony[0].Proof.BitLength
-
-	var SameFpk = func(tpp *PunishmentProposal) bool {
-		if bytes.Equal(fpkBytes, tpp.Proposal.PubKey.SerializeCompressed()) &&
-			fpkBitLength == tpp.BitLength {
-			return true
-		} else {
-			return false
-		}
-	}
-
-	for i, tpp := range pp.punishmentProposalList {
-		if SameFpk(tpp) {
-			pp.punishmentProposalList = append(pp.punishmentProposalList[:i], pp.punishmentProposalList[i+1:]...)
-			return
-		}
-	}
-}
-
-func (pp *ProposalPool) removeFaultPubKeys(fpkList []*wire.FaultPubKey) {
-	for _, fpk := range fpkList {
-		pp.removeFaultPubKey(fpk)
+		punishments: newPunishmentProposalList(faults),
 	}
 }
 
 func (pp *ProposalPool) SyncAttachBlock(block *massutil.Block) {
 	pp.Lock()
 	defer pp.Unlock()
-
-	pp.removeFaultPubKeys(block.MsgBlock().Proposals.PunishmentArea)
+	pp.punishments.removeFaultPubKeys(block.MsgBlock().Proposals.PunishmentArea...)
 }
 
 func (pp *ProposalPool) SyncDetachBlock(block *massutil.Block) {
 	pp.Lock()
 	defer pp.Unlock()
+	pp.punishments.insertFaultPubKeys(block.MsgBlock().Proposals.PunishmentArea...)
+}
 
-	pp.insertFaultPubKeys(block.MsgBlock().Proposals.PunishmentArea)
+func (pp *ProposalPool) InsertFaultPubKey(fpk *wire.FaultPubKey) {
+	pp.Lock()
+	defer pp.Unlock()
+	pp.punishments.insertFaultPubKeys(fpk)
+}
+
+func (pp *ProposalPool) PunishmentProposals() []*PunishmentProposal {
+	pp.RLock()
+	defer pp.RUnlock()
+	return pp.punishments.slice()
+}
+
+// PunishmentProposal warps wire.FaultPubKey
+type PunishmentProposal struct {
+	*wire.FaultPubKey
+	BitLength int
+	Height    uint64
+	Size      int
+}
+
+func NewPunishmentProposal(fpk *wire.FaultPubKey) *PunishmentProposal {
+	return new(PunishmentProposal).setFaultPubKey(fpk)
+}
+
+func (p *PunishmentProposal) setFaultPubKey(fpk *wire.FaultPubKey) *PunishmentProposal {
+	p.FaultPubKey = fpk
+	p.BitLength = fpk.Testimony[0].Proof.BitLength
+	p.Height = fpk.Testimony[0].Height
+	p.Size = fpk.PlainSize()
+	return p
+}
+
+func (p *PunishmentProposal) LessThan(other *PunishmentProposal) bool {
+	if p.BitLength != other.BitLength {
+		return p.BitLength < other.BitLength
+	}
+	if p.Height != other.Height {
+		return p.Height > other.Height
+	}
+	return p.Size > other.Size
+}
+
+type punishmentProposalList struct {
+	list     *list.List               // linked list to store punishment proposals
+	elements map[string]*list.Element // public_key_string -> *list.Element
+}
+
+func newPunishmentProposalList(faults []*wire.FaultPubKey) *punishmentProposalList {
+	l := &punishmentProposalList{
+		list:     list.New(),
+		elements: map[string]*list.Element{},
+	}
+	l.insertFaultPubKeys(faults...)
+	return l
+}
+
+func (l *punishmentProposalList) slice() []*PunishmentProposal {
+	results := make([]*PunishmentProposal, 0, len(l.elements))
+	for e := l.list.Front(); e != nil; e = e.Next() {
+		results = append(results, e.Value.(*PunishmentProposal))
+	}
+	return results
+}
+
+func (l *punishmentProposalList) insertFaultPubKeys(faults ...*wire.FaultPubKey) {
+	for i := range faults {
+		l.insert(NewPunishmentProposal(faults[i]))
+	}
+}
+
+func (l *punishmentProposalList) removeFaultPubKeys(faults ...*wire.FaultPubKey) {
+	for i := range faults {
+		l.remove(faults[i].PubKey)
+	}
+}
+
+func (l *punishmentProposalList) insert(new *PunishmentProposal) {
+	pkStr := hex.EncodeToString(new.PubKey.SerializeCompressed())
+	old, exists := l.elements[pkStr]
+	if exists {
+		// preserve better proposal, remove duplicate pubKeys
+		if !old.Value.(*PunishmentProposal).LessThan(new) {
+			return
+		}
+		l.list.Remove(old)
+		delete(l.elements, pkStr)
+	}
+	// insert to empty list
+	if l.list.Len() == 0 {
+		l.elements[pkStr] = l.list.PushFront(new)
+		return
+	}
+	// insert to the tail of list
+	if tail := l.list.Back().Value.(*PunishmentProposal); !tail.LessThan(new) {
+		l.elements[pkStr] = l.list.PushBack(new)
+		return
+	}
+	// insert to somewhere else in the list
+	for e := l.list.Front(); e != nil; e = e.Next() {
+		if e.Value.(*PunishmentProposal).LessThan(new) {
+			l.elements[pkStr] = l.list.InsertBefore(new, e)
+			break
+		}
+	}
+}
+
+func (l *punishmentProposalList) remove(pubKey *pocec.PublicKey) {
+	pkStr := hex.EncodeToString(pubKey.SerializeCompressed())
+	old, exists := l.elements[pkStr]
+	if !exists {
+		return
+	}
+	l.list.Remove(old)
+	delete(l.elements, pkStr)
 }
