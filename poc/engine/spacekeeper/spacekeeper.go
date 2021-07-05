@@ -4,9 +4,9 @@ import (
 	"context"
 	"errors"
 
+	"github.com/massnetorg/mass-core/poc/pocutil"
+	"github.com/massnetorg/mass-core/pocec"
 	"massnet.org/mass/poc/engine"
-	"massnet.org/mass/poc/pocutil"
-	"massnet.org/mass/pocec"
 )
 
 type SpaceKeeper interface {
@@ -16,10 +16,10 @@ type SpaceKeeper interface {
 	Type() string
 	WorkSpaceIDs(flags engine.WorkSpaceStateFlags) ([]string, error)
 	WorkSpaceInfos(flags engine.WorkSpaceStateFlags) ([]engine.WorkSpaceInfo, error)
-	GetProof(ctx context.Context, sid string, challenge pocutil.Hash) (*engine.WorkSpaceProof, error)
-	GetProofs(ctx context.Context, flags engine.WorkSpaceStateFlags, challenge pocutil.Hash) ([]*engine.WorkSpaceProof, error)
-	GetProofReader(ctx context.Context, sid string, challenge pocutil.Hash) (engine.ProofReader, error)
-	GetProofsReader(ctx context.Context, flags engine.WorkSpaceStateFlags, challenge pocutil.Hash) (engine.ProofReader, error)
+	GetProof(ctx context.Context, sid string, challenge pocutil.Hash, filter bool) (*engine.WorkSpaceProof, error)
+	GetProofs(ctx context.Context, flags engine.WorkSpaceStateFlags, challenge pocutil.Hash, filter bool) ([]*engine.WorkSpaceProof, error)
+	GetProofReader(ctx context.Context, sid string, challenge pocutil.Hash, filter bool) (engine.ProofReader, error)
+	GetProofsReader(ctx context.Context, flags engine.WorkSpaceStateFlags, challenge pocutil.Hash, filter bool) (engine.ProofReader, error)
 	ActOnWorkSpace(sid string, action engine.ActionType) error
 	ActOnWorkSpaces(flags engine.WorkSpaceStateFlags, action engine.ActionType) (map[string]error, error)
 	SignHash(sid string, hash [32]byte) (*pocec.Signature, error)

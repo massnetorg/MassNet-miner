@@ -8,8 +8,8 @@ import (
 	"strings"
 	"sync"
 
-	"massnet.org/mass/poc"
-	"massnet.org/mass/pocec"
+	"github.com/massnetorg/mass-core/poc"
+	"github.com/massnetorg/mass-core/pocec"
 )
 
 // ---------------------------------------
@@ -243,10 +243,30 @@ func (act ActionType) String() string {
 // Proof is nil when Error is not nil
 type WorkSpaceProof struct {
 	SpaceID   string
-	Proof     *poc.Proof
+	Proof     *poc.DefaultProof
 	PublicKey *pocec.PublicKey
 	Ordinal   int64
 	Error     error
+}
+
+func (p *WorkSpaceProof) PlotPublicKey() []byte {
+	return p.PublicKey.SerializeCompressed()
+}
+
+func (p *WorkSpaceProof) ProofType() poc.ProofType {
+	return poc.ProofTypeDefault
+}
+
+func (p *WorkSpaceProof) ProofBitLength() int {
+	return p.Proof.BL
+}
+
+func (p *WorkSpaceProof) ChiaPoolPublicKey() []byte {
+	return nil
+}
+
+func (p *WorkSpaceProof) ChiaPlotID() [32]byte {
+	return [32]byte{}
 }
 
 // WorkSpaceInfo represents the general info of a WorkSpace

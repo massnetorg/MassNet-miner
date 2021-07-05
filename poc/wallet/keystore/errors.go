@@ -1,6 +1,6 @@
 package keystore
 
-import "massnet.org/mass/errors"
+import "github.com/massnetorg/mass-core/errors"
 
 var (
 	ErrKMPubKeyNotSet = errors.New("required KeystoreManager public key parameters not stored in database")

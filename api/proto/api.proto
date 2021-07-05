@@ -175,6 +175,16 @@ service ApiService {
               body: "*"
         };
     }
+    rpc GetCapacitySpacesV2 (google.protobuf.Empty) returns (WorkSpacesResponseV2) {
+        option (google.api.http) = {
+            get: "/v2/spaces"
+        };
+    }
+    rpc GetCapacitySpaceV2 (WorkSpaceRequest) returns (WorkSpaceResponseV2) {
+        option (google.api.http) = {
+            get: "/v2/spaces/{space_id}"
+        };
+    }
     rpc GetClientStatus (google.protobuf.Empty) returns (GetClientStatusResponse) {
         option (google.api.http) = {
               get: "/v1/client/status"
@@ -524,12 +534,14 @@ message ConfigureSpaceKeeperRequest {
 }
 
 message WorkSpace {
-    int64  ordinal    = 1;
-    string public_key = 2;
-    string address    = 3;
-    uint32 bit_length = 4;
-    string state      = 5;
-    double progress   = 6;
+    string space_id   = 1;
+    int64  ordinal    = 2;
+    string public_key = 3;
+    string address    = 4;
+    uint32 bit_length = 5;
+    string state      = 6;
+    double progress   = 7;
+    string binding_target = 8;
 }
 
 message WorkSpaceRequest {
@@ -577,6 +589,31 @@ message WorkSpacesByDirsResponse {
     string error_message = 4;
 }
 
+message WorkSpaceV2 {
+    string space_id       = 1;
+    string plot_id        = 2;
+    string public_key     = 3;
+    string binding_target = 4;
+    uint32 k              = 5;
+}
+
+message WorkSpaceRequestV2 {
+    string space_id = 1;
+}
+
+message WorkSpaceResponseV2 {
+    WorkSpaceV2 space = 1;
+    uint32 error_code = 2;
+    string error_message = 3;
+}
+
+message WorkSpacesResponseV2 {
+    uint32 space_count = 1;
+    repeated WorkSpaceV2 spaces = 2;
+    uint32 error_code = 3;
+    string error_message = 4;
+}
+
 message GetClientStatusResponse{
     message peerCountInfo {
         uint32 total    = 1;
@@ -594,16 +631,17 @@ message GetClientStatusResponse{
         repeated peerInfo other    = 3;
     }
     string version           = 1;
-    bool peer_listening       = 2;
+    bool peer_listening      = 2;
     bool syncing             = 3;
     bool mining              = 4;
-    bool space_keeping        = 5;
-    string chain_id           = 6;
-    uint64 local_best_height   = 7;
-    uint64 known_best_height   = 8;
-    string p2p_id             = 9;
-    peerCountInfo peer_count  = 10;
+    bool space_keeping       = 5;
+    string chain_id          = 6;
+    uint64 local_best_height = 7;
+    uint64 known_best_height = 8;
+    string p2p_id            = 9;
+    peerCountInfo peer_count = 10;
     peerList peers           = 11;
+    string service_mode      = 12;
 }
 
 message QuitClientResponse{

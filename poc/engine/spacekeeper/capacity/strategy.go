@@ -10,15 +10,15 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/massnetorg/mass-core/logging"
+	"github.com/massnetorg/mass-core/massutil/service"
+	"github.com/massnetorg/mass-core/poc"
+	"github.com/massnetorg/mass-core/pocec"
 	"github.com/panjf2000/ants"
 	"massnet.org/mass/config"
-	"massnet.org/mass/logging"
-	"massnet.org/mass/massutil/service"
-	"massnet.org/mass/poc"
 	"massnet.org/mass/poc/engine"
 	massdb_v1 "massnet.org/mass/poc/engine/massdb/massdb.v1"
 	"massnet.org/mass/poc/engine/spacekeeper"
-	"massnet.org/mass/pocec"
 )
 
 const (
@@ -282,7 +282,7 @@ func parseMassDBArgsFromString(ordinalStr, pkStr, blStr string) (ordinal int, pu
 	if err != nil {
 		return
 	}
-	if !poc.EnsureBitLength(bitLength) {
+	if !poc.ProofTypeDefault.EnsureBitLength(bitLength) {
 		err = poc.ErrProofInvalidBitLength
 		return
 	}

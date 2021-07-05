@@ -4,9 +4,9 @@ import (
 	"encoding/hex"
 	"errors"
 
-	"massnet.org/mass/poc"
-	"massnet.org/mass/poc/pocutil"
-	"massnet.org/mass/pocec"
+	"github.com/massnetorg/mass-core/poc"
+	"github.com/massnetorg/mass-core/poc/pocutil"
+	"github.com/massnetorg/mass-core/pocec"
 )
 
 type MassDB interface {
@@ -35,7 +35,7 @@ type MassDB interface {
 	PubKey() *pocec.PublicKey
 
 	// Get assembled proof by challenge
-	GetProof(challenge pocutil.Hash) (proof *poc.Proof, err error)
+	GetProof(challenge pocutil.Hash, filter bool) (proof *poc.DefaultProof, err error)
 
 	// Get plot progress
 	Progress() (prePlotted, plotted bool, progress float64)

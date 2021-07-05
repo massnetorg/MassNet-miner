@@ -8,12 +8,12 @@ import (
 	"os"
 	"sync/atomic"
 
+	"github.com/massnetorg/mass-core/logging"
+	"github.com/massnetorg/mass-core/poc"
+	"github.com/massnetorg/mass-core/poc/pocutil"
+	"github.com/massnetorg/mass-core/pocec"
 	"github.com/shirou/gopsutil/mem"
-	"massnet.org/mass/logging"
-	"massnet.org/mass/poc"
 	"massnet.org/mass/poc/engine/massdb"
-	"massnet.org/mass/poc/pocutil"
-	"massnet.org/mass/pocec"
 )
 
 const (

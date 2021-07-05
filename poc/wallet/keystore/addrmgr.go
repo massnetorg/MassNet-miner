@@ -10,13 +10,13 @@ import (
 	"sync"
 	"time"
 
+	"github.com/massnetorg/mass-core/logging"
+	"github.com/massnetorg/mass-core/pocec"
 	"massnet.org/mass/config"
-	"massnet.org/mass/logging"
 	"massnet.org/mass/poc/wallet/db"
 	"massnet.org/mass/poc/wallet/keystore/hdkeychain"
 	"massnet.org/mass/poc/wallet/keystore/snacl"
 	"massnet.org/mass/poc/wallet/keystore/zero"
-	"massnet.org/mass/pocec"
 )
 
 type AddrManager struct {

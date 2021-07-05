@@ -7,14 +7,14 @@ import (
 	"sync"
 	"sync/atomic"
 
+	"github.com/massnetorg/mass-core/logging"
+	"github.com/massnetorg/mass-core/massutil/service"
+	"github.com/massnetorg/mass-core/poc"
+	"github.com/massnetorg/mass-core/poc/pocutil"
+	"github.com/massnetorg/mass-core/pocec"
 	"github.com/panjf2000/ants"
 	"github.com/shirou/gopsutil/disk"
-	"massnet.org/mass/logging"
-	"massnet.org/mass/massutil/service"
-	"massnet.org/mass/poc"
 	"massnet.org/mass/poc/engine"
-	"massnet.org/mass/poc/pocutil"
-	"massnet.org/mass/pocec"
 )
 
 const (
@@ -119,18 +119,18 @@ func (sk *SpaceKeeper) WorkSpaceInfos(flags engine.WorkSpaceStateFlags) ([]engin
 	return result, nil
 }
 
-func (sk *SpaceKeeper) GetProof(ctx context.Context, sid string, challenge pocutil.Hash) (*engine.WorkSpaceProof, error) {
+func (sk *SpaceKeeper) GetProof(ctx context.Context, sid string, challenge pocutil.Hash, filter bool) (*engine.WorkSpaceProof, error) {
 	if !sk.Started() {
 		return nil, ErrSpaceKeeperIsNotRunning
 	}
 
 	if ws, ok := sk.workSpaceIndex[allState].Items()[sid]; ok && ws.using {
-		return sk.getProof(ws, challenge), nil
+		return sk.getProof(ws, challenge, filter), nil
 	}
 	return nil, ErrWorkSpaceDoesNotExist
 }
 
-func (sk *SpaceKeeper) GetProofs(ctx context.Context, flags engine.WorkSpaceStateFlags, challenge pocutil.Hash) ([]*engine.WorkSpaceProof, error) {
+func (sk *SpaceKeeper) GetProofs(ctx context.Context, flags engine.WorkSpaceStateFlags, challenge pocutil.Hash, filter bool) ([]*engine.WorkSpaceProof, error) {
 	if !sk.Started() {
 		return nil, ErrSpaceKeeperIsNotRunning
 	}
@@ -140,7 +140,7 @@ func (sk *SpaceKeeper) GetProofs(ctx context.Context, flags engine.WorkSpaceStat
 		items[ws.id.String()] = ws
 	}
 
-	proofs := sk.getProofs(items, challenge)
+	proofs := sk.getProofs(items, challenge, filter)
 	result := make([]*engine.WorkSpaceProof, 0, len(proofs))
 	for _, proof := range proofs {
 		result = append(result, proof)
@@ -148,7 +148,7 @@ func (sk *SpaceKeeper) GetProofs(ctx context.Context, flags engine.WorkSpaceStat
 	return result, nil
 }
 
-func (sk *SpaceKeeper) GetProofReader(ctx context.Context, sid string, challenge pocutil.Hash) (engine.ProofReader, error) {
+func (sk *SpaceKeeper) GetProofReader(ctx context.Context, sid string, challenge pocutil.Hash, filter bool) (engine.ProofReader, error) {
 	if !sk.Started() {
 		return nil, ErrSpaceKeeperIsNotRunning
 	}
@@ -156,7 +156,7 @@ func (sk *SpaceKeeper) GetProofReader(ctx context.Context, sid string, challenge
 	if ws, ok := sk.workSpaceIndex[allState].Items()[sid]; ok && ws.using {
 		prw := engine.NewProofRW(ctx, 1)
 		go func() {
-			if err := prw.Write(sk.getProof(ws, challenge)); err != nil {
+			if err := prw.Write(sk.getProof(ws, challenge, filter)); err != nil {
 				logging.CPrint(logging.WARN, "fail to write WorkSpaceProof to ProofRW", logging.LogFormat{"err": err, "sid": sid, "challenge": challenge})
 			}
 			prw.Close()
@@ -166,7 +166,7 @@ func (sk *SpaceKeeper) GetProofReader(ctx context.Context, sid string, challenge
 	return nil, ErrWorkSpaceDoesNotExist
 }
 
-func (sk *SpaceKeeper) GetProofsReader(ctx context.Context, flags engine.WorkSpaceStateFlags, challenge pocutil.Hash) (engine.ProofReader, error) {
+func (sk *SpaceKeeper) GetProofsReader(ctx context.Context, flags engine.WorkSpaceStateFlags, challenge pocutil.Hash, filter bool) (engine.ProofReader, error) {
 	if !sk.Started() {
 		return nil, ErrSpaceKeeperIsNotRunning
 	}
@@ -177,7 +177,7 @@ func (sk *SpaceKeeper) GetProofsReader(ctx context.Context, flags engine.WorkSpa
 	}
 	prw := engine.NewProofRW(ctx, len(items))
 	go func() {
-		proofs := sk.getProofs(items, challenge)
+		proofs := sk.getProofs(items, challenge, filter)
 		var err error
 		for i, proof := range proofs {
 			if err = prw.Write(proof); err != nil {
@@ -554,7 +554,7 @@ func (sk *SpaceKeeper) IsCapacityAvailable(path string, capacityBytes uint64) er
 	var plottedBytes uint64
 	for _, wsi := range wsiList {
 		if wsi.State == engine.Ready || wsi.State == engine.Mining {
-			plottedBytes += uint64(poc.BitLengthDiskSize[wsi.BitLength])
+			plottedBytes += poc.ProofTypeDefault.PlotSize(wsi.BitLength)
 		}
 	}
 
@@ -612,8 +612,8 @@ func (sk *SpaceKeeper) getIndexedWorkSpaces() map[int][]*WorkSpace {
 	return resultMap
 }
 
-func (sk *SpaceKeeper) getProof(ws *WorkSpace, challenge pocutil.Hash) *engine.WorkSpaceProof {
-	proof, err := ws.db.GetProof(challenge)
+func (sk *SpaceKeeper) getProof(ws *WorkSpace, challenge pocutil.Hash, filter bool) *engine.WorkSpaceProof {
+	proof, err := ws.db.GetProof(challenge, filter)
 	result := &engine.WorkSpaceProof{
 		SpaceID:   ws.id.String(),
 		Proof:     proof,
@@ -624,7 +624,7 @@ func (sk *SpaceKeeper) getProof(ws *WorkSpace, challenge pocutil.Hash) *engine.W
 	return result
 }
 
-func (sk *SpaceKeeper) getProofs(wsMap map[string]*WorkSpace, challenge pocutil.Hash) map[string]*engine.WorkSpaceProof {
+func (sk *SpaceKeeper) getProofs(wsMap map[string]*WorkSpace, challenge pocutil.Hash, filter bool) map[string]*engine.WorkSpaceProof {
 	result := make(map[string]*engine.WorkSpaceProof)
 	resultCh := make(chan *engine.WorkSpaceProof)
 	waitCh := make(chan struct{})
@@ -640,7 +640,7 @@ func (sk *SpaceKeeper) getProofs(wsMap map[string]*WorkSpace, challenge pocutil.
 		ws0 := ws
 		wg.Add(1)
 		if err := sk.workerPool.Submit(func() {
-			resultCh <- sk.getProof(ws0, challenge)
+			resultCh <- sk.getProof(ws0, challenge, filter)
 			wg.Done()
 		}); err != nil {
 			// TODO: handle error?
@@ -827,7 +827,7 @@ func (sk *SpaceKeeper) generateFillSpaceListByBitLength(dstList []*WorkSpace, cu
 	// check os disk size
 	var requiredOSDiskSize int
 	for bl, target := range targetCount {
-		requiredOSDiskSize += (target - currentCount[bl]) * poc.BitLengthDiskSize[bl]
+		requiredOSDiskSize += (target - currentCount[bl]) * int(poc.ProofTypeDefault.PlotSize(bl))
 	}
 	if err := sk.checkOSDiskSize(requiredOSDiskSize); err != nil {
 		return nil, err
@@ -874,7 +874,7 @@ func (sk *SpaceKeeper) ConfigureBySize(targetSize uint64, execPlot, execMine boo
 		return nil, err
 	}
 
-	if targetSize < uint64(poc.BitLengthDiskSize[usableBitLength()[0]]) {
+	if targetSize < poc.ProofTypeDefault.PlotSize(usableBitLength()[0]) {
 		return failureReturn(ErrConfigUnderSizeTarget)
 	}
 
@@ -920,9 +920,9 @@ func fillSpaceListBySize(dstList []*WorkSpace, srcMap map[int][]*WorkSpace, curr
 			continue
 		}
 		for _, space := range srcMap[bl] {
-			currentSize += poc.BitLengthDiskSize[bl]
+			currentSize += int(poc.ProofTypeDefault.PlotSize(bl))
 			if currentSize > targetSize {
-				currentSize -= poc.BitLengthDiskSize[bl]
+				currentSize -= int(poc.ProofTypeDefault.PlotSize(bl))
 				continue
 			}
 			dstList = append(dstList, space)
@@ -930,7 +930,7 @@ func fillSpaceListBySize(dstList []*WorkSpace, srcMap map[int][]*WorkSpace, curr
 	}
 
 	// returns true if target size is satisfied
-	if currentSize == targetSize || targetSize-currentSize < poc.MinDiskSize {
+	if currentSize == targetSize || targetSize-currentSize < int(poc.ProofTypeDefault.PlotSize(poc.MinValidDefaultBitLength)) {
 		return dstList, currentSize, true
 	}
 
@@ -956,11 +956,11 @@ func (sk *SpaceKeeper) generateFillSpaceListBySize(dstList []*WorkSpace, current
 	for _, bl := range allowedBL {
 	out:
 		for {
-			if targetSize-currentSize < poc.BitLengthDiskSize[bl] {
+			if targetSize-currentSize < int(poc.ProofTypeDefault.PlotSize(bl)) {
 				// Current BitLength is too large
 				break out
 			}
-			currentSize += poc.BitLengthDiskSize[bl]
+			currentSize += int(poc.ProofTypeDefault.PlotSize(bl))
 			newWS, err := sk.generateNewWorkSpace(bl)
 			if err != nil {
 				return nil, currentSize, err
@@ -1023,7 +1023,7 @@ func (sk *SpaceKeeper) generateFillSpaceListByPubKey(dstList []*WorkSpace, targe
 	var requiredOSDiskSize int
 	for pubKey, bl := range targetPubKeyBL {
 		if _, exists := sk.workSpaceIndex[allState].Get(NewSpaceID(int64(pubKeyOrdinal[pubKey]), pubKey, bl).String()); !exists {
-			requiredOSDiskSize += poc.BitLengthDiskSize[bl]
+			requiredOSDiskSize += int(poc.ProofTypeDefault.PlotSize(bl))
 		}
 	}
 	if err := sk.checkOSDiskSize(requiredOSDiskSize); err != nil {
@@ -1214,9 +1214,9 @@ func fillSpaceListByPathSize(path string, dstList []*WorkSpace, srcMap map[int][
 			if space.rootDir != path {
 				continue
 			}
-			currentSize += poc.BitLengthDiskSize[bl]
+			currentSize += int(poc.ProofTypeDefault.PlotSize(bl))
 			if currentSize > targetSize {
-				currentSize -= poc.BitLengthDiskSize[bl]
+				currentSize -= int(poc.ProofTypeDefault.PlotSize(bl))
 				continue
 			}
 			dstList = append(dstList, space)
@@ -1224,7 +1224,7 @@ func fillSpaceListByPathSize(path string, dstList []*WorkSpace, srcMap map[int][
 	}
 
 	// returns true if target size is satisfied
-	if currentSize == targetSize || targetSize-currentSize < poc.MinDiskSize {
+	if currentSize == targetSize || targetSize-currentSize < int(poc.ProofTypeDefault.PlotSize(poc.MinValidDefaultBitLength)) {
 		return dstList, currentSize, true
 	}
 
@@ -1250,11 +1250,11 @@ func (sk *SpaceKeeper) generateFillSpaceListByPathSize(path string, dstList []*W
 	for _, bl := range allowedBL {
 	out:
 		for {
-			if targetSize-currentSize < poc.BitLengthDiskSize[bl] {
+			if targetSize-currentSize < int(poc.ProofTypeDefault.PlotSize(bl)) {
 				// Current BitLength is too large
 				break out
 			}
-			currentSize += poc.BitLengthDiskSize[bl]
+			currentSize += int(poc.ProofTypeDefault.PlotSize(bl))
 			newWS, err := sk.generateNewWorkSpaceByPath(path, bl)
 			if err != nil {
 				return nil, currentSize, err

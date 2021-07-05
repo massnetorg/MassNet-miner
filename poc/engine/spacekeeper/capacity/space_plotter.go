@@ -5,8 +5,8 @@ import (
 	"math"
 	"sync"
 
+	"github.com/massnetorg/mass-core/logging"
 	"gopkg.in/karalabe/cookiejar.v2/collections/prque"
-	"massnet.org/mass/logging"
 	"massnet.org/mass/poc/engine"
 )
 

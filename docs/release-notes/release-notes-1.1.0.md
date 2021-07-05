@@ -11,6 +11,3 @@ See [cmd/database-upgrade/1.1.0/USAGE.md](https://github.com/massnetorg/MassNet-
 
 ### Storage
 * Save blocks to disk instead of database.
-
-### Mining
-* Support configuring capacity for each mining path.

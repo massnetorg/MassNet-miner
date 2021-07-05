@@ -994,6 +994,58 @@
           "ApiService"
         ]
       }
+    },
+    "/v2/spaces": {
+      "get": {
+        "operationId": "GetCapacitySpacesV2",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/rpcprotobufWorkSpacesResponseV2"
+            }
+          },
+          "404": {
+            "description": "Not found.",
+            "schema": {
+              "format": "string"
+            }
+          }
+        },
+        "tags": [
+          "ApiService"
+        ]
+      }
+    },
+    "/v2/spaces/{space_id}": {
+      "get": {
+        "operationId": "GetCapacitySpaceV2",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/rpcprotobufWorkSpaceResponseV2"
+            }
+          },
+          "404": {
+            "description": "Not found.",
+            "schema": {
+              "format": "string"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "space_id",
+            "in": "path",
+            "required": true,
+            "type": "string"
+          }
+        ],
+        "tags": [
+          "ApiService"
+        ]
+      }
     }
   },
   "definitions": {
@@ -1555,6 +1607,9 @@
         },
         "peers": {
           "$ref": "#/definitions/GetClientStatusResponsepeerList"
+        },
+        "service_mode": {
+          "type": "string"
         }
       }
     },
@@ -2258,6 +2313,9 @@
     "rpcprotobufWorkSpace": {
       "type": "object",
       "properties": {
+        "space_id": {
+          "type": "string"
+        },
         "ordinal": {
           "type": "string",
           "format": "int64"
@@ -2278,6 +2336,9 @@
         "progress": {
           "type": "number",
           "format": "double"
+        },
+        "binding_target": {
+          "type": "string"
         }
       }
     },
@@ -2301,6 +2362,42 @@
         },
         "error_message": {
           "type": "string"
+        }
+      }
+    },
+    "rpcprotobufWorkSpaceResponseV2": {
+      "type": "object",
+      "properties": {
+        "space": {
+          "$ref": "#/definitions/rpcprotobufWorkSpaceV2"
+        },
+        "error_code": {
+          "type": "integer",
+          "format": "int64"
+        },
+        "error_message": {
+          "type": "string"
+        }
+      }
+    },
+    "rpcprotobufWorkSpaceV2": {
+      "type": "object",
+      "properties": {
+        "space_id": {
+          "type": "string"
+        },
+        "plot_id": {
+          "type": "string"
+        },
+        "public_key": {
+          "type": "string"
+        },
+        "binding_target": {
+          "type": "string"
+        },
+        "k": {
+          "type": "integer",
+          "format": "int64"
         }
       }
     },
@@ -2358,6 +2455,28 @@
           "type": "array",
           "items": {
             "$ref": "#/definitions/rpcprotobufWorkSpace"
+          }
+        },
+        "error_code": {
+          "type": "integer",
+          "format": "int64"
+        },
+        "error_message": {
+          "type": "string"
+        }
+      }
+    },
+    "rpcprotobufWorkSpacesResponseV2": {
+      "type": "object",
+      "properties": {
+        "space_count": {
+          "type": "integer",
+          "format": "int64"
+        },
+        "spaces": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/rpcprotobufWorkSpaceV2"
           }
         },
         "error_code": {

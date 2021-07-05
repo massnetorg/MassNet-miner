@@ -6,15 +6,16 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/massnetorg/mass-core/blockchain"
+	"github.com/massnetorg/mass-core/consensus"
+	"github.com/massnetorg/mass-core/logging"
+	"github.com/massnetorg/mass-core/massutil"
+	"github.com/massnetorg/mass-core/massutil/safetype"
+	"github.com/massnetorg/mass-core/poc"
 	"github.com/shirou/gopsutil/disk"
 	"google.golang.org/grpc/status"
-	"massnet.org/mass/blockchain"
-	"massnet.org/mass/consensus"
-	"massnet.org/mass/logging"
-	"massnet.org/mass/massutil"
-	"massnet.org/mass/massutil/safetype"
+	"massnet.org/mass/config"
 	"massnet.org/mass/mining"
-	"massnet.org/mass/poc"
 )
 
 const (
@@ -241,9 +242,9 @@ func checkBlockIDLen(id string) error {
 	return nil
 }
 
-func checkMinerDiskSize(sk mining.SpaceKeeper, requiredMiBytes uint64) error {
+func checkMinerDiskSize(sk mining.SpaceKeeperV1, requiredMiBytes uint64) error {
 	var requiredBytes = requiredMiBytes * poc.MiB
-	if requiredBytes < uint64(poc.MinDiskSize) {
+	if requiredBytes < poc.ProofTypeDefault.PlotSize(poc.MinValidDefaultBitLength) {
 		return status.New(ErrAPIMinerInvalidCapacity, "capacity should be no less than 96 MiB").Err()
 	}
 	availableBytes, err := sk.AvailableDiskSize()
@@ -258,7 +259,7 @@ func checkMinerDiskSize(sk mining.SpaceKeeper, requiredMiBytes uint64) error {
 
 func checkPathDiskSize(path string, requiredMiBytes uint64) error {
 	var requiredBytes = requiredMiBytes * poc.MiB
-	if requiredBytes < uint64(poc.MinDiskSize) {
+	if requiredBytes < poc.ProofTypeDefault.PlotSize(poc.MinValidDefaultBitLength) {
 		return status.New(ErrAPIMinerInvalidCapacity, "capacity should be no less than 96 MiB").Err()
 	}
 	usage, err := disk.Usage(path)
@@ -271,11 +272,20 @@ func checkPathDiskSize(path string, requiredMiBytes uint64) error {
 	return nil
 }
 
-func checkMinerPathCapacity(sk mining.SpaceKeeper, path string, requiredMiBytes uint64) error {
+func checkMinerPathCapacity(sk mining.SpaceKeeperV1, path string, requiredMiBytes uint64) error {
 	var requiredBytes = requiredMiBytes * poc.MiB
 	return sk.IsCapacityAvailable(path, requiredBytes)
 }
 
 func generateReqID() int {
 	return rand.Intn(1000000)
+}
+
+func getBindingTarget(pub []byte, proofType poc.ProofType, bitLength int) (string, error) {
+	hash := append(massutil.Hash160(pub), byte(proofType), byte(bitLength))
+	target, err := massutil.NewAddressBindingTarget(hash, config.ChainParams)
+	if err != nil {
+		return "", err
+	}
+	return target.EncodeAddress(), nil
 }

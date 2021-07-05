@@ -5,12 +5,8 @@ import (
 	"os"
 	"path/filepath"
 
-	"massnet.org/mass/config/pb"
-
 	"massnet.org/mass/config"
-
 	"massnet.org/mass/poc/wallet/db"
-
 	"massnet.org/mass/poc/wallet/keystore"
 )
 
@@ -19,7 +15,7 @@ type PoCWallet struct {
 	store db.DB
 }
 
-func NewPoCWallet(cfg *configpb.Config, password []byte) (*PoCWallet, error) {
+func NewPoCWallet(cfg *config.Config, password []byte) (*PoCWallet, error) {
 	dbPath := filepath.Join(cfg.Miner.MinerDir, "keystore")
 
 	var store db.DB
@@ -27,18 +23,18 @@ func NewPoCWallet(cfg *configpb.Config, password []byte) (*PoCWallet, error) {
 		if !fi.IsDir() {
 			return nil, fmt.Errorf("open %s: not a directory", dbPath)
 		}
-		if store, err = db.OpenDB(cfg.Db.DbType, dbPath); err != nil {
+		if store, err = db.OpenDB(cfg.Datastore.DBType, dbPath); err != nil {
 			return nil, err
 		}
 	} else if os.IsNotExist(err) {
-		if store, err = db.CreateDB(cfg.Db.DbType, dbPath); err != nil {
+		if store, err = db.CreateDB(cfg.Datastore.DBType, dbPath); err != nil {
 			return nil, err
 		}
 	} else {
 		return nil, err
 	}
 
-	manager, err := keystore.NewKeystoreManagerForPoC(store, password, &config.ChainParams)
+	manager, err := keystore.NewKeystoreManagerForPoC(store, password, config.ChainParams)
 	if err != nil {
 		store.Close()
 		return nil, err

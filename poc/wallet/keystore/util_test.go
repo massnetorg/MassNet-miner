@@ -5,7 +5,7 @@ import (
 	"strings"
 	"testing"
 
-	"massnet.org/mass/massutil/base58"
+	"github.com/massnetorg/mass-core/massutil/base58"
 )
 
 func TestBase58(t *testing.T) {

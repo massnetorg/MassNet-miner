@@ -1,11 +1,11 @@
 package keystore
 
 import (
+	"github.com/massnetorg/mass-core/logging"
+	"github.com/massnetorg/mass-core/massutil"
+	"github.com/massnetorg/mass-core/pocec"
 	"massnet.org/mass/config"
-	"massnet.org/mass/logging"
-	"massnet.org/mass/massutil"
 	"massnet.org/mass/poc/wallet/keystore/hdkeychain"
-	"massnet.org/mass/pocec"
 )
 
 type ManagedAddress struct {

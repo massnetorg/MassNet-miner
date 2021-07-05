@@ -7,21 +7,21 @@ import (
 	"net/http"
 
 	"github.com/grpc-ecosystem/grpc-gateway/runtime"
+	"github.com/massnetorg/mass-core/errors"
+	"github.com/massnetorg/mass-core/logging"
 	"golang.org/x/net/context"
 	"google.golang.org/grpc"
 	gw "massnet.org/mass/api/proto"
 	"massnet.org/mass/config"
-	"massnet.org/mass/errors"
-	"massnet.org/mass/logging"
 )
 
 const (
 	DefaultHTTPLimit = 128 // DefaultHTTPLimit default max http connections
 )
 
-func Run(cfg *config.Config) error {
-	portHttp := cfg.Network.API.APIPortHttp
-	portGRPC := cfg.Network.API.APIPortGRPC
+func Run(cfg *config.API) error {
+	portHttp := cfg.PortHttp
+	portGRPC := cfg.PortGRPC
 
 	ctx := context.Background()
 	ctx, cancel := context.WithCancel(ctx)
@@ -30,20 +30,20 @@ func Run(cfg *config.Config) error {
 	mux := runtime.NewServeMux(runtime.WithMarshalerOption(runtime.MIMEWildcard,
 		&runtime.JSONPb{OrigName: true, EmitDefaults: true}))
 	opts := []grpc.DialOption{grpc.WithInsecure(), grpc.WithDefaultCallOptions(grpc.MaxCallRecvMsgSize(maxMsgSize))}
-	echoEndpoint := flag.String("echo_endpoint", ":"+portGRPC, "endpoint of Service")
+	echoEndpoint := flag.String("echo_endpoint", fmt.Sprintf(":%d", portGRPC), "endpoint of Service")
 	err := gw.RegisterApiServiceHandlerFromEndpoint(ctx, mux, *echoEndpoint, opts)
 	if err != nil {
 		return err
 	}
 
 	// TODO: CORS
-	isAllowedAddress, err := getIPAccessControlFunc(cfg.Network.API.APIWhitelist, cfg.Network.API.APIAllowedLan)
+	isAllowedAddress, err := getIPAccessControlFunc(cfg.Whitelist, cfg.AllowedLan)
 	if err != nil {
 		return err
 	}
 
 	handle := accessControlHandler(concurrentRequestHandler(maxBytesHandler(mux)), isAllowedAddress)
-	port := fmt.Sprintf("%s%s", ":", portHttp)
+	port := fmt.Sprintf(":%d", portHttp)
 	return http.ListenAndServe(port, handle)
 }
 

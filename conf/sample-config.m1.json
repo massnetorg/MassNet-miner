@@ -1,0 +1,14 @@
+{
+  "p2p": {
+    "seeds": ""
+  },
+  "miner": {
+    "payout_addresses": [
+      "ms1q..."
+    ],
+    "generate": true,
+    "proof_dir": [
+      "/path/to/storage"
+    ]
+  }
+}

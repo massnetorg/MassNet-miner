@@ -3,9 +3,9 @@ package keystore
 import (
 	"bytes"
 	"fmt"
-	"massnet.org/mass/massutil"
-	"massnet.org/mass/massutil/bech32"
-	"massnet.org/mass/pocec"
+	"github.com/massnetorg/mass-core/massutil"
+	"github.com/massnetorg/mass-core/massutil/bech32"
+	"github.com/massnetorg/mass-core/pocec"
 )
 
 func pubKeyToAccountID(pubKey *pocec.PublicKey) (string, error) {

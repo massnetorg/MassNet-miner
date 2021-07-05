@@ -2,9 +2,10 @@ package keystore
 
 import (
 	"encoding/hex"
-	"massnet.org/mass/config"
-	"massnet.org/mass/pocec"
 	"testing"
+
+	"github.com/massnetorg/mass-core/pocec"
+	"massnet.org/mass/config"
 )
 
 func TestNewPoCAddress(t *testing.T) {
@@ -18,12 +19,12 @@ func TestNewPoCAddress(t *testing.T) {
 	}
 
 	// nil
-	_, _, err = NewPoCAddress(nil, &config.ChainParams)
+	_, _, err = NewPoCAddress(nil, config.ChainParams)
 	if err != ErrNilPointer {
 		t.Fatalf("failed to catch error, %v", err)
 	}
 
-	scriptHash, address, err := NewPoCAddress(samplePk, &config.ChainParams)
+	scriptHash, address, err := NewPoCAddress(samplePk, config.ChainParams)
 	if err != nil {
 		t.Fatalf("failed to new poc address, %v", err)
 	}

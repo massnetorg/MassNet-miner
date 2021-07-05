@@ -11,6 +11,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	_ "massnet.org/mass/poc/wallet/db/ldb"
+	_ "massnet.org/mass/poc/wallet/db/rdb"
 )
 
 const testDbRoot = "testDbs"

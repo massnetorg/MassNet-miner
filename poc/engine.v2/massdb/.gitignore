@@ -1,0 +1,6 @@
+# generated MassDB
+*.massdb
+*.plot
+
+# test data
+testdata/

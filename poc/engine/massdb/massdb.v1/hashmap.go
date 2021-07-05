@@ -6,10 +6,10 @@ import (
 	"os"
 	"path"
 
-	"massnet.org/mass/logging"
+	"github.com/massnetorg/mass-core/logging"
+	"github.com/massnetorg/mass-core/poc/pocutil"
+	"github.com/massnetorg/mass-core/pocec"
 	"massnet.org/mass/poc/engine/massdb"
-	"massnet.org/mass/poc/pocutil"
-	"massnet.org/mass/pocec"
 )
 
 // File struct for massdb.v1

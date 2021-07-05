@@ -4,8 +4,8 @@ import (
 	"context"
 
 	"github.com/golang/protobuf/ptypes/empty"
+	"github.com/massnetorg/mass-core/logging"
 	pb "massnet.org/mass/api/proto"
-	"massnet.org/mass/logging"
 	"massnet.org/mass/version"
 )
 
@@ -17,10 +17,11 @@ func (s *Server) GetClientStatus(ctx context.Context, in *empty.Empty) (*pb.GetC
 		PeerListening:   s.syncManager.Switch().IsListening(),
 		Syncing:         !s.syncManager.IsCaughtUp(),
 		Mining:          s.pocMiner.Started(),
-		SpaceKeeping:    s.spaceKeeper.Started(),
+		SpaceKeeping:    s.isSpaceKeeping(),
 		LocalBestHeight: s.chain.BestBlockHeight(),
 		ChainId:         s.chain.ChainID().String(),
 		P2PId:           s.syncManager.NodeInfo().PubKey.KeyString(),
+		ServiceMode:     s.serviceMode.String(),
 	}
 
 	if bestPeer := s.syncManager.BestPeer(); bestPeer != nil {
@@ -64,4 +65,14 @@ func (s *Server) QuitClient(ctx context.Context, in *empty.Empty) (*pb.QuitClien
 	return &pb.QuitClientResponse{
 		Msg: "wait for client quitting process",
 	}, nil
+}
+
+func (s *Server) isSpaceKeeping() bool {
+	if s.serviceMode.Is(version.ModeMinerV1) {
+		return s.spaceKeeperV1.Started()
+	}
+	if s.serviceMode.Is(version.ModeMinerV2) {
+		return s.spaceKeeperV2.Started()
+	}
+	return false
 }

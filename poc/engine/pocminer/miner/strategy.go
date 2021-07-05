@@ -7,14 +7,15 @@ import (
 	"sync/atomic"
 	"time"
 
-	"massnet.org/mass/blockchain"
-	"massnet.org/mass/logging"
-	"massnet.org/mass/massutil"
+	"github.com/massnetorg/mass-core/blockchain"
+	"github.com/massnetorg/mass-core/consensus/forks"
+	"github.com/massnetorg/mass-core/logging"
+	"github.com/massnetorg/mass-core/massutil"
+	"github.com/massnetorg/mass-core/poc/pocutil"
+	"github.com/massnetorg/mass-core/wire"
 	"massnet.org/mass/poc/engine"
 	"massnet.org/mass/poc/engine/pocminer"
 	"massnet.org/mass/poc/engine/spacekeeper"
-	"massnet.org/mass/poc/pocutil"
-	"massnet.org/mass/wire"
 )
 
 const (
@@ -90,14 +91,17 @@ func (m *PoCMiner) syncGetBestProof(pocTemplate *blockchain.PoCTemplate, quit ch
 	defer ticker.Stop()
 
 	queryStart := time.Now()
-	skProofs, err := m.SpaceKeeper.GetProofs(context.TODO(), engine.SFMining, challenge)
+	skProofs, err := m.SpaceKeeper.GetProofs(context.TODO(), engine.SFMining, challenge, forks.EnforceMASSIP0002(pocTemplate.Height))
 	if err != nil {
 		return nil, err
 	}
 	queryElapsed := time.Since(queryStart)
 	proofs := getValidProofs(skProofs)
+	var validCount = len(proofs)
+	proofs = getBindingProofs(proofs, pocTemplate)
+	var bindingCount = len(proofs)
 	logging.CPrint(logging.INFO, "find proofs for next block, waiting for proper slot",
-		logging.LogFormat{"height": pocTemplate.Height, "valid_count": len(proofs), "total_count": len(skProofs), "query_time": queryElapsed.Seconds()})
+		logging.LogFormat{"height": pocTemplate.Height, "binding_count": bindingCount, "valid_count": validCount, "total_count": len(skProofs), "query_time": queryElapsed.Seconds()})
 	if len(proofs) == 0 {
 		return nil, errNoValidProof
 	}
@@ -135,7 +139,7 @@ try:
 				}
 
 				// Ensure there are valid qualities
-				qualities, err := getQualities(proofs, challenge, workSlot, pocTemplate.Height)
+				qualities, err := getQualities(proofs, challenge, forks.EnforceMASSIP0002(pocTemplate.Height), workSlot, pocTemplate.Height)
 				if err != nil {
 					return nil, err
 				}
@@ -180,10 +184,20 @@ func getValidProofs(proofs []*engine.WorkSpaceProof) []*engine.WorkSpaceProof {
 	return result
 }
 
-func getQualities(proofs []*engine.WorkSpaceProof, challenge pocutil.Hash, slot, height uint64) ([]*big.Int, error) {
+func getBindingProofs(proofs []*engine.WorkSpaceProof, template *blockchain.PoCTemplate) []*engine.WorkSpaceProof {
+	result := make([]*engine.WorkSpaceProof, 0)
+	for i := range proofs {
+		if template.PassBinding(proofs[i]) {
+			result = append(result, proofs[i])
+		}
+	}
+	return result
+}
+
+func getQualities(proofs []*engine.WorkSpaceProof, challenge pocutil.Hash, filter bool, slot, height uint64) ([]*big.Int, error) {
 	qualities := make([]*big.Int, len(proofs))
 	for i, proof := range proofs {
-		quality, err := proof.Proof.GetVerifiedQuality(pocutil.PubKeyHash(proof.PublicKey), challenge, slot, height)
+		quality, err := proof.Proof.VerifiedQuality(pocutil.PubKeyHash(proof.PublicKey), challenge, filter, slot, height)
 		if err != nil {
 			return nil, err
 		}

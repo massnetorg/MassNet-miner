@@ -7,13 +7,13 @@ import (
 	"testing"
 	"time"
 
-	"massnet.org/mass/logging"
-	"massnet.org/mass/poc"
+	"github.com/massnetorg/mass-core/logging"
+	"github.com/massnetorg/mass-core/poc"
+	"github.com/massnetorg/mass-core/poc/pocutil"
+	"github.com/massnetorg/mass-core/pocec"
+	"github.com/massnetorg/mass-core/testutil"
 	"massnet.org/mass/poc/engine"
 	"massnet.org/mass/poc/engine/massdb/massdb.v1"
-	"massnet.org/mass/poc/pocutil"
-	"massnet.org/mass/pocec"
-	"massnet.org/mass/testutil"
 )
 
 func init() {
@@ -122,14 +122,14 @@ func TestValid(t *testing.T) {
 	t.Logf("valid count %d/%d (%f)\n", validCount, testRound, float64(validCount)/float64(testRound))
 }
 
-func getProof(mdb *massdb_v1.MassDBV1, challenge pocutil.Hash, pkHash pocutil.Hash) (proof *poc.Proof, err error) {
+func getProof(mdb *massdb_v1.MassDBV1, challenge pocutil.Hash, pkHash pocutil.Hash) (proof *poc.DefaultProof, err error) {
 	cShort := pocutil.CutHash(challenge, mdb.BitLength())
-	proof = &poc.Proof{BitLength: mdb.BitLength()}
+	proof = &poc.DefaultProof{BL: mdb.BitLength()}
 	proof.X, proof.XPrime, err = mdb.HashMapB.Get(cShort)
 	if err != nil {
 		return
 	}
-	if err = poc.VerifyProof(proof, pkHash, challenge); err != nil {
+	if err = poc.VerifyProof(proof, pkHash, challenge, false); err != nil {
 		return nil, err
 	}
 	return proof, nil

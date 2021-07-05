@@ -10,10 +10,10 @@ import (
 	"sync"
 	"sync/atomic"
 
-	"massnet.org/mass/poc"
+	"github.com/massnetorg/mass-core/poc"
+	"github.com/massnetorg/mass-core/poc/pocutil"
+	"github.com/massnetorg/mass-core/pocec"
 	"massnet.org/mass/poc/engine/massdb"
-	"massnet.org/mass/poc/pocutil"
-	"massnet.org/mass/pocec"
 )
 
 type MapType uint8
@@ -118,18 +118,18 @@ func (mdb *MassDBV1) Get(z pocutil.PoCValue) (x, xp pocutil.PoCValue, err error)
 	return pocutil.Bytes2PoCValue(xb, bl), pocutil.Bytes2PoCValue(xpb, bl), nil
 }
 
-func (mdb *MassDBV1) GetProof(challenge pocutil.Hash) (*poc.Proof, error) {
+func (mdb *MassDBV1) GetProof(challenge pocutil.Hash, filter bool) (*poc.DefaultProof, error) {
 	var bl = mdb.bl
 	x, xp, err := mdb.HashMapB.Get(pocutil.CutHash(challenge, bl))
 	if err != nil {
 		return nil, err
 	}
-	proof := &poc.Proof{
-		X:         x,
-		XPrime:    xp,
-		BitLength: bl,
+	proof := &poc.DefaultProof{
+		X:      x,
+		XPrime: xp,
+		BL:     bl,
 	}
-	err = poc.VerifyProof(proof, mdb.pubKeyHash, challenge)
+	err = poc.VerifyProof(proof, mdb.pubKeyHash, challenge, filter)
 	if err != nil {
 		return nil, err
 	}

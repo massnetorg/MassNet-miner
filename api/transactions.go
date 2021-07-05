@@ -7,16 +7,18 @@ import (
 	"sort"
 
 	"github.com/golang/protobuf/ptypes/empty"
+	"github.com/massnetorg/mass-core/blockchain"
+	"github.com/massnetorg/mass-core/consensus"
+	"github.com/massnetorg/mass-core/consensus/forks"
+	"github.com/massnetorg/mass-core/logging"
+	"github.com/massnetorg/mass-core/massutil"
+	"github.com/massnetorg/mass-core/poc"
+	"github.com/massnetorg/mass-core/txscript"
+	"github.com/massnetorg/mass-core/wire"
 	"golang.org/x/net/context"
 	"google.golang.org/grpc/status"
 	pb "massnet.org/mass/api/proto"
-	"massnet.org/mass/blockchain"
 	"massnet.org/mass/config"
-	"massnet.org/mass/consensus"
-	"massnet.org/mass/logging"
-	"massnet.org/mass/massutil"
-	"massnet.org/mass/txscript"
-	"massnet.org/mass/wire"
 )
 
 func (s *Server) GetCoinbase(ctx context.Context, in *pb.GetCoinbaseRequest) (*pb.GetCoinbaseResponse, error) {
@@ -43,7 +45,7 @@ func (s *Server) GetCoinbase(ctx context.Context, in *pb.GetCoinbaseRequest) (*p
 		return nil, err
 	}
 
-	vouts, totalFees, err := s.showCoinbaseOutputDetails(msgtx, &config.ChainParams, block.Height(), bindingValue, block.MsgBlock().Header.Proof.BitLength)
+	vouts, totalFees, err := s.showCoinbaseOutputDetails(msgtx, config.ChainParams, block, bindingValue)
 	if err != nil {
 		return nil, err
 	}
@@ -281,7 +283,7 @@ func (s *Server) showCoinbaseInputDetails(mtx *wire.MsgTx) ([]*pb.Vin, int64, er
 	}
 }
 
-func (s *Server) showCoinbaseOutputDetails(mtx *wire.MsgTx, chainParams *config.Params, height uint64, bindingValue int64, bitlength int) ([]*pb.CoinbaseVout, int64, error) {
+func (s *Server) showCoinbaseOutputDetails(mtx *wire.MsgTx, chainParams *config.Params, block *massutil.Block, bindingValue int64) ([]*pb.CoinbaseVout, int64, error) {
 	voutList := make([]*pb.CoinbaseVout, 0, len(mtx.TxOut))
 
 	g, err := massutil.NewAmountFromInt(bindingValue)
@@ -297,7 +299,29 @@ func (s *Server) showCoinbaseOutputDetails(mtx *wire.MsgTx, chainParams *config.
 	}
 	numStaking := coinbasePayload.NumStakingReward()
 
-	baseMiner, superNode, err := blockchain.CalcBlockSubsidy(height, chainParams, g, int(numStaking), bitlength)
+	plotSize := poc.PlotSize(block.MsgBlock().Header.Proof.Type(), block.MsgBlock().Header.Proof.BitLength())
+	prev, err := s.chain.GetBlockByHash(&block.MsgBlock().Header.Previous)
+	if err != nil {
+		logging.CPrint(logging.ERROR, "failed to get previous block", logging.LogFormat{"error": err})
+		return nil, -1, err
+	}
+	trie, err := blockchain.GetBindingState(s.chain, prev.MsgBlock().Header.BindingRoot)
+	if err != nil {
+		logging.CPrint(logging.ERROR, "failed to get previous binding state", logging.LogFormat{"error": err})
+		return nil, -1, err
+	}
+	networkBinding, err := blockchain.GetNetworkBinding(trie)
+	if err != nil {
+		logging.CPrint(logging.ERROR, "failed to get previous network binding", logging.LogFormat{"error": err})
+		return nil, -1, err
+	}
+	requiredBinding, err := forks.GetRequiredBinding(block.Height(), plotSize, block.MsgBlock().Header.Proof.BitLength(), networkBinding)
+	if err != nil {
+		logging.CPrint(logging.ERROR, "failed to get required binding", logging.LogFormat{"error": err})
+		return nil, -1, err
+	}
+
+	baseMiner, superNode, err := blockchain.CalcBlockSubsidy(block.Height(), chainParams, g.Cmp(requiredBinding) >= 0, numStaking > 0)
 	if err != nil {
 		return nil, -1, err
 	}

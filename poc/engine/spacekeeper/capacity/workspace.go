@@ -2,12 +2,11 @@ package capacity
 
 import (
 	"bytes"
-
+	"github.com/massnetorg/mass-core/poc/pocutil"
+	"github.com/massnetorg/mass-core/pocec"
 	"github.com/orcaman/concurrent-map"
 	"massnet.org/mass/poc/engine"
 	"massnet.org/mass/poc/engine/massdb"
-	"massnet.org/mass/poc/pocutil"
-	"massnet.org/mass/pocec"
 )
 
 type WorkSpace struct {

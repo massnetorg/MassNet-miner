@@ -8,13 +8,14 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/massnetorg/mass-core/logging"
+	"github.com/massnetorg/mass-core/massutil"
+	"github.com/massnetorg/mass-core/wire"
+	wirepb "github.com/massnetorg/mass-core/wire/pb"
 	"golang.org/x/net/context"
 	"google.golang.org/grpc/status"
 	pb "massnet.org/mass/api/proto"
 	"massnet.org/mass/config"
-	"massnet.org/mass/logging"
-	"massnet.org/mass/massutil"
-	"massnet.org/mass/wire"
 )
 
 const (
@@ -130,7 +131,7 @@ func (s *Server) marshalGetBlockResponse(blk *massutil.Block) (*pb.GetBlockRespo
 		banList = append(banList, hex.EncodeToString(pk.SerializeCompressed()))
 	}
 
-	var proof = blockHeader.Proof
+	var proof = wirepb.ProofToProto(blockHeader.Proof)
 	blockReply := &pb.GetBlockResponse{
 		Hash:            blockHash,
 		ChainId:         blockHeader.ChainID.String(),
@@ -148,7 +149,7 @@ func (s *Server) marshalGetBlockResponse(blk *massutil.Block) (*pb.GetBlockRespo
 		Challenge:       hex.EncodeToString(blockHeader.Challenge.Bytes()),
 		PublicKey:       hex.EncodeToString(blockHeader.PubKey.SerializeCompressed()),
 		Proof:           &pb.Proof{X: hex.EncodeToString(proof.X), XPrime: hex.EncodeToString(proof.XPrime), BitLength: uint32(proof.BitLength)},
-		BlockSignature:  &pb.PoCSignature{R: hex.EncodeToString(blockHeader.Signature.R.Bytes()), S: hex.EncodeToString(blockHeader.Signature.S.Bytes())},
+		BlockSignature:  createPoCSignatureResult(blockHeader.Signature),
 		BanList:         banList,
 		Size:            uint32(blk.Size()),
 		TimeUtc:         blockHeader.Timestamp.UTC().Format(time.RFC3339),
@@ -166,7 +167,7 @@ func (s *Server) marshalGetBlockResponse(blk *massutil.Block) (*pb.GetBlockRespo
 	txns := blk.Transactions()
 	rawTxns := make([]*pb.TxRawResult, len(txns))
 	for i, tx := range txns {
-		rawTxn, err := s.createTxRawResult(&config.ChainParams,
+		rawTxn, err := s.createTxRawResult(config.ChainParams,
 			tx.MsgTx(), tx.Hash().String(), blockHeader,
 			blockHash, idx, maxIdx)
 		if err != nil {
@@ -206,7 +207,7 @@ func (s *Server) marshalGetBlockV2Response(blk *massutil.Block) (*pb.GetBlockRes
 	}
 
 	txns := blk.Transactions()
-	var proof = blockHeader.Proof
+	var proof = wirepb.ProofToProto(blockHeader.Proof)
 	blockReply := &pb.GetBlockResponseV2{
 		Hash:            blockHash,
 		ChainId:         blockHeader.ChainID.String(),
@@ -224,7 +225,7 @@ func (s *Server) marshalGetBlockV2Response(blk *massutil.Block) (*pb.GetBlockRes
 		Challenge:       hex.EncodeToString(blockHeader.Challenge.Bytes()),
 		PublicKey:       hex.EncodeToString(blockHeader.PubKey.SerializeCompressed()),
 		Proof:           &pb.Proof{X: hex.EncodeToString(proof.X), XPrime: hex.EncodeToString(proof.XPrime), BitLength: uint32(proof.BitLength)},
-		Signature:       &pb.PoCSignature{R: hex.EncodeToString(blockHeader.Signature.R.Bytes()), S: hex.EncodeToString(blockHeader.Signature.S.Bytes())},
+		Signature:       createPoCSignatureResult(blockHeader.Signature),
 		BanList:         banList,
 		PlainSize:       uint32(blk.Size()),
 		PacketSize:      uint32(blk.PacketSize()),
@@ -264,7 +265,7 @@ func (s *Server) marshalGetBlockHeaderResponse(blk *massutil.Block) (*pb.GetBloc
 		shaNextStr = shaNext.String()
 	}
 
-	var proof = blk.MsgBlock().Header.Proof
+	var proof = wirepb.ProofToProto(blk.MsgBlock().Header.Proof)
 
 	msgBlock := blk.MsgBlock()
 
@@ -290,7 +291,7 @@ func (s *Server) marshalGetBlockHeaderResponse(blk *massutil.Block) (*pb.GetBloc
 		Challenge:       hex.EncodeToString(msgBlock.Header.Challenge.Bytes()),
 		PublicKey:       hex.EncodeToString(msgBlock.Header.PubKey.SerializeCompressed()),
 		Proof:           &pb.Proof{X: hex.EncodeToString(proof.X), XPrime: hex.EncodeToString(proof.XPrime), BitLength: uint32(proof.BitLength)},
-		BlockSignature:  &pb.PoCSignature{R: hex.EncodeToString(msgBlock.Header.Signature.R.Bytes()), S: hex.EncodeToString(msgBlock.Header.Signature.S.Bytes())},
+		BlockSignature:  createPoCSignatureResult(msgBlock.Header.Signature),
 		BanList:         banList,
 		Quality:         quality,
 		TimeUtc:         msgBlock.Header.Timestamp.UTC().Format(time.RFC3339),

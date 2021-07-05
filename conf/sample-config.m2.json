@@ -1,0 +1,19 @@
+{
+  "p2p": {
+    "seeds": ""
+  },
+  "miner": {
+    "payout_addresses": [
+      "ms1q..."
+    ],
+    "generate": true,
+    "proof_dir": [
+      "/path/to/chia_plots1",
+      "/path/to/chia_plots2",
+      "/path/to/chia_plots3",
+      "/path/to/chia_plots4",
+      "/path/to/chia_plots5"
+    ],
+    "chia_miner_keystore": "chia-miner-keystore.json"
+  }
+}

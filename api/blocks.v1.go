@@ -5,12 +5,14 @@ import (
 	"sort"
 
 	"github.com/golang/protobuf/ptypes/empty"
+	"github.com/massnetorg/mass-core/interfaces"
+	"github.com/massnetorg/mass-core/logging"
+	"github.com/massnetorg/mass-core/pocec"
+	"github.com/massnetorg/mass-core/wire"
+	wirepb "github.com/massnetorg/mass-core/wire/pb"
 	"golang.org/x/net/context"
 	"google.golang.org/grpc/status"
 	pb "massnet.org/mass/api/proto"
-	"massnet.org/mass/logging"
-	"massnet.org/mass/pocec"
-	"massnet.org/mass/wire"
 )
 
 func (s *Server) GetBestBlock(ctx context.Context, msg *empty.Empty) (*pb.GetBestBlockResponse, error) {
@@ -163,6 +165,8 @@ func createFaultPubKeyResult(proposals []*wire.FaultPubKey) []*pb.FaultPubKey {
 				ban = append(ban, hex.EncodeToString(pk.SerializeCompressed()))
 			}
 
+			proof := wirepb.ProofToProto(h.Proof)
+
 			th := &pb.Header{
 				Hash:            h.BlockHash().String(),
 				ChainId:         h.ChainID.String(),
@@ -176,8 +180,8 @@ func createFaultPubKeyResult(proposals []*wire.FaultPubKey) []*pb.FaultPubKey {
 				Target:          h.Target.Text(16),
 				Challenge:       hex.EncodeToString(h.Challenge.Bytes()),
 				PublicKey:       hex.EncodeToString(h.PubKey.SerializeCompressed()),
-				Proof:           &pb.Proof{X: hex.EncodeToString(h.Proof.X), XPrime: hex.EncodeToString(h.Proof.XPrime), BitLength: uint32(h.Proof.BitLength)},
-				BlockSignature:  &pb.PoCSignature{R: hex.EncodeToString(h.Signature.R.Bytes()), S: hex.EncodeToString(h.Signature.S.Bytes())},
+				Proof:           &pb.Proof{X: hex.EncodeToString(proof.X), XPrime: hex.EncodeToString(proof.XPrime), BitLength: uint32(proof.BitLength)},
+				BlockSignature:  createPoCSignatureResult(h.Signature),
 				BanList:         ban,
 			}
 			t = append(t, th)
@@ -192,4 +196,12 @@ func createFaultPubKeyResult(proposals []*wire.FaultPubKey) []*pb.FaultPubKey {
 		result = append(result, fpk)
 	}
 	return result
+}
+
+// TODO: show more types
+func createPoCSignatureResult(sigI interfaces.Signature) *pb.PoCSignature {
+	if sig, ok := sigI.(*pocec.Signature); ok {
+		return &pb.PoCSignature{R: hex.EncodeToString(sig.R.Bytes()), S: hex.EncodeToString(sig.S.Bytes())}
+	}
+	return &pb.PoCSignature{}
 }

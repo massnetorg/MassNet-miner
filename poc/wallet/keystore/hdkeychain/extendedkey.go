@@ -18,11 +18,12 @@ import (
 	"fmt"
 	"math/big"
 
+	coreconfig "github.com/massnetorg/mass-core/config"
+	"github.com/massnetorg/mass-core/massutil"
+	"github.com/massnetorg/mass-core/massutil/base58"
+	"github.com/massnetorg/mass-core/pocec"
+	"github.com/massnetorg/mass-core/wire"
 	"massnet.org/mass/config"
-	"massnet.org/mass/massutil"
-	"massnet.org/mass/massutil/base58"
-	"massnet.org/mass/pocec"
-	"massnet.org/mass/wire"
 )
 
 const (
@@ -344,7 +345,7 @@ func (k *ExtendedKey) Neuter() (*ExtendedKey, error) {
 	}
 
 	// Get the associated public extended key version bytes.
-	version, err := config.HDPrivateKeyToPublicKeyID(k.version)
+	version, err := coreconfig.HDPrivateKeyToPublicKeyID(k.version)
 	if err != nil {
 		return nil, err
 	}

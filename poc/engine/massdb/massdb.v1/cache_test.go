@@ -3,13 +3,14 @@ package massdb_v1_test
 import (
 	"encoding/json"
 	"fmt"
-	"github.com/shirou/gopsutil/mem"
-	"massnet.org/mass/poc"
-	"massnet.org/mass/poc/engine/massdb/massdb.v1"
-	"massnet.org/mass/testutil"
 	"math/rand"
 	"runtime"
 	"testing"
+
+	"github.com/massnetorg/mass-core/poc"
+	"github.com/massnetorg/mass-core/testutil"
+	"github.com/shirou/gopsutil/mem"
+	"massnet.org/mass/poc/engine/massdb/massdb.v1"
 )
 
 func TestFreeMemory(t *testing.T) {

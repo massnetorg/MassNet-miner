@@ -11,15 +11,15 @@ import (
 
 	"bytes"
 
+	"github.com/massnetorg/mass-core/errors"
+	"github.com/massnetorg/mass-core/logging"
+	"github.com/massnetorg/mass-core/pocec"
+	"github.com/massnetorg/mass-core/wire"
 	"massnet.org/mass/config"
-	"massnet.org/mass/errors"
-	"massnet.org/mass/logging"
 	"massnet.org/mass/poc/wallet/db"
 	"massnet.org/mass/poc/wallet/keystore/hdkeychain"
 	"massnet.org/mass/poc/wallet/keystore/snacl"
 	"massnet.org/mass/poc/wallet/keystore/zero"
-	"massnet.org/mass/pocec"
-	"massnet.org/mass/wire"
 )
 
 const (
@@ -899,6 +899,48 @@ func (kmc *KeystoreManagerForPoC) NewKeystore(privPassphrase, seed []byte, remar
 	}
 
 	return accountID, nil
+}
+
+// TODO: remove before release @191125
+func RecoverMasterHDKey(kStore *Keystore, oldPass []byte) ([]byte, error) {
+	privParamsOld, err := hex.DecodeString(kStore.Crypto.PrivParams)
+	if err != nil {
+		return nil, err
+	}
+	var masterPrivKeyOld snacl.SecretKey
+	defer masterPrivKeyOld.Zero()
+	err = unmarshalMasterPrivKey(&masterPrivKeyOld, oldPass, privParamsOld)
+	if err != nil {
+		logging.CPrint(logging.ERROR, "unmarshalMasterPrivKey failed",
+			logging.LogFormat{
+				"err": err,
+			})
+		return nil, err
+	}
+
+	cryptoPrivKeyEncOld, err := hex.DecodeString(kStore.Crypto.CryptoKeyPrivEnc)
+	if err != nil {
+		return nil, err
+	}
+	MasterHDPrivKeyEncOld, err := hex.DecodeString(kStore.Crypto.MasterHDPrivKeyEnc)
+	if err != nil {
+		return nil, err
+	}
+
+	cPrivKeyBytes, err := masterPrivKeyOld.Decrypt(cryptoPrivKeyEncOld)
+	if err != nil {
+		return nil, err
+	}
+	var cPrivKeyOld cryptoKey
+	cPrivKeyOld.CopyBytes(cPrivKeyBytes)
+	zero.Bytes(cPrivKeyBytes)
+	defer cPrivKeyOld.Zero()
+
+	mHDKeyBytes, err := cPrivKeyOld.Decrypt(MasterHDPrivKeyEncOld)
+	if err != nil {
+		return nil, err
+	}
+	return mHDKeyBytes, nil
 }
 
 func (kmc *KeystoreManagerForPoC) allocAddrMgrNamespace(dbTransaction db.DBTransaction, oldPass, newPass []byte, pubPasphrase []byte, kStore *Keystore,

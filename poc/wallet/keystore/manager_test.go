@@ -9,13 +9,14 @@ import (
 	"os"
 	"testing"
 
+	"github.com/massnetorg/mass-core/errors"
+	"github.com/massnetorg/mass-core/pocec"
+	"github.com/massnetorg/mass-core/wire"
 	"massnet.org/mass/config"
-	"massnet.org/mass/errors"
 	mwdb "massnet.org/mass/poc/wallet/db"
+	"massnet.org/mass/poc/wallet/keystore/hdkeychain"
 	"massnet.org/mass/poc/wallet/keystore/snacl"
 	"massnet.org/mass/poc/wallet/keystore/zero"
-	"massnet.org/mass/pocec"
-	"massnet.org/mass/wire"
 )
 
 const (
@@ -66,6 +67,9 @@ var (
 
 	exportFilePath       = "./testdata/keystore"
 	exportFileNamePerfix = "keystore"
+
+	masterHDPrivStr    = "d63da8b12621813343136a5fc7ac96df41a7ae9695113fdfdcdfd80ba9bdf55c"
+	masterChainCodeStr = "549d7cd80207a6ae4d3a1bbf817ea5a0d91bce7df34a7d7586d68dd2106d36fc"
 )
 
 func TestKeystoreManagerForPoC_NewKeystore(t *testing.T) {
@@ -76,28 +80,28 @@ func TestKeystoreManagerForPoC_NewKeystore(t *testing.T) {
 	defer tearDown()
 
 	// new poc keystore manager
-	kmc, err := NewKeystoreManagerForPoC(ldb, pubPassphrase, &config.ChainParams)
+	kmc, err := NewKeystoreManagerForPoC(ldb, pubPassphrase, config.ChainParams)
 	if err != nil {
 		t.Fatalf("failed to new keystore manager, %v", err)
 	}
 
 	// new keystore
 	// error: invalid private pass
-	_, err = kmc.NewKeystore(illegalPrivPassphrase, seed, "error-test1", &config.ChainParams, fastScrypt)
+	_, err = kmc.NewKeystore(illegalPrivPassphrase, seed, "error-test1", config.ChainParams, fastScrypt)
 	if err != ErrIllegalPassphrase {
 		t.Fatalf("failed to catch error, expected: illegal passphrase, actual: %v", err)
 	}
 	t.Logf("pass test 1")
 
 	// error: same as public pass
-	_, err = kmc.NewKeystore(pubPassphrase, seed, "error-test2", &config.ChainParams, fastScrypt)
+	_, err = kmc.NewKeystore(pubPassphrase, seed, "error-test2", config.ChainParams, fastScrypt)
 	if err != ErrIllegalNewPrivPass {
 		t.Fatalf("failed to catch error, expected: new private passphrase same as public passphrase, actual: %v", err)
 	}
 	t.Logf("pass test 2")
 
 	// error: illegal seed
-	_, err = kmc.NewKeystore(privPassphrase, illegalSeed, "error-test3", &config.ChainParams, fastScrypt)
+	_, err = kmc.NewKeystore(privPassphrase, illegalSeed, "error-test3", config.ChainParams, fastScrypt)
 	if err != ErrIllegalSeed {
 		t.Fatalf("failed to catch error, expected: illegal seed, actual: %v", err)
 	}
@@ -113,24 +117,24 @@ func TestKeystoreManagerForPoC_NewKeystore_NextAddress(t *testing.T) {
 
 	t.Log("/*pocKeystoreManager*/")
 	// new poc keystore manager
-	kmc, err := NewKeystoreManagerForPoC(ldb, pubPassphrase, &config.ChainParams)
+	kmc, err := NewKeystoreManagerForPoC(ldb, pubPassphrase, config.ChainParams)
 	if err != nil {
 		t.Fatalf("failed to new keystore manager, %v", err)
 	}
 	//new keystore
-	acctID1, nerr := kmc.NewKeystore(privPassphrase, seed, "first", &config.ChainParams, fastScrypt)
+	acctID1, nerr := kmc.NewKeystore(privPassphrase, seed, "first", config.ChainParams, fastScrypt)
 	if nerr != nil {
 		t.Fatalf("failed to new keystore, %v", nerr)
 	}
-	acctID2, nerr := kmc.NewKeystore(privPassphrase2, seed2, "second", &config.ChainParams, fastScrypt)
+	acctID2, nerr := kmc.NewKeystore(privPassphrase2, seed2, "second", config.ChainParams, fastScrypt)
 	if nerr != ErrDifferentPrivPass {
 		t.Fatalf("failed to check private pass, %v", nerr)
 	}
-	acctID2, nerr = kmc.NewKeystore(privPassphrase, seed2, "second", &config.ChainParams, fastScrypt)
+	acctID2, nerr = kmc.NewKeystore(privPassphrase, seed2, "second", config.ChainParams, fastScrypt)
 	if nerr != nil {
 		t.Fatalf("failed to new keystore, %v", nerr)
 	}
-	_, nerr = kmc.NewKeystore(privPassphrase, nil, "third", &config.ChainParams, fastScrypt)
+	_, nerr = kmc.NewKeystore(privPassphrase, nil, "third", config.ChainParams, fastScrypt)
 	if nerr != nil {
 		t.Fatalf("failed to new keystore, %v", nerr)
 	}
@@ -203,31 +207,31 @@ func TestNewKeystoreManagerForPoC(t *testing.T) {
 
 	// new keystore manager
 	// error: nil pointer
-	_, err = NewKeystoreManagerForPoC(ldb, nil, &config.ChainParams)
+	_, err = NewKeystoreManagerForPoC(ldb, nil, config.ChainParams)
 	if err != ErrNilPointer {
 		t.Fatalf("failed to catch error, expected: the pointer is nil, actual: %v", err)
 	}
 	t.Logf("pass test 1")
 
 	// error: illegal pass
-	_, err = NewKeystoreManagerForPoC(ldb, pubPassphraseTooShort, &config.ChainParams)
+	_, err = NewKeystoreManagerForPoC(ldb, pubPassphraseTooShort, config.ChainParams)
 	if err != ErrIllegalPassphrase {
 		t.Fatalf("failed to catch error, expected: illegal passphrase, actual: %v", err)
 	}
 	t.Logf("pass test 2")
 
 	// new poc keystore manager
-	kmc, err := NewKeystoreManagerForPoC(ldb, pubPassphrase, &config.ChainParams)
+	kmc, err := NewKeystoreManagerForPoC(ldb, pubPassphrase, config.ChainParams)
 	if err != nil {
 		t.Fatalf("failed to new keystore manager, %v", err)
 	}
 
 	//new keystore
-	_, err = kmc.NewKeystore(privPassphrase, seed, "first", &config.ChainParams, fastScrypt)
+	_, err = kmc.NewKeystore(privPassphrase, seed, "first", config.ChainParams, fastScrypt)
 	if err != nil {
 		t.Fatalf("failed to new keystore, %v", err)
 	}
-	_, err = kmc.NewKeystore(privPassphrase, seed2, "second", &config.ChainParams, fastScrypt)
+	_, err = kmc.NewKeystore(privPassphrase, seed2, "second", config.ChainParams, fastScrypt)
 	if err != nil {
 		t.Fatalf("failed to new keystore, %v", err)
 	}
@@ -248,7 +252,7 @@ func TestNewKeystoreManagerForPoC(t *testing.T) {
 		showAddrManagerDetails(t, addrManager)
 	}
 
-	newKmc, err := NewKeystoreManagerForPoC(ldb, pubPassphrase, &config.ChainParams)
+	newKmc, err := NewKeystoreManagerForPoC(ldb, pubPassphrase, config.ChainParams)
 	if err != nil {
 		t.Fatalf("failed to new keystore manager, %v", err)
 	}
@@ -272,12 +276,12 @@ func TestKeystoreManagerForPoC_Unlock(t *testing.T) {
 	t.Log("/*pocKeystoreManager*/")
 
 	// new poc keystore manager
-	kmc, err := NewKeystoreManagerForPoC(ldb, pubPassphrase, &config.ChainParams)
+	kmc, err := NewKeystoreManagerForPoC(ldb, pubPassphrase, config.ChainParams)
 	if err != nil {
 		t.Fatalf("failed to new keystore manager, %v", err)
 	}
 	//new keystore
-	acctId, nerr := kmc.NewKeystore(privPassphrase, seed, "first", &config.ChainParams, fastScrypt)
+	acctId, nerr := kmc.NewKeystore(privPassphrase, seed, "first", config.ChainParams, fastScrypt)
 	if nerr != nil {
 		t.Fatalf("failed to new keystore, %v", nerr)
 	}
@@ -388,16 +392,16 @@ func TestKeystoreManagerForPoC_DeleteKeystore(t *testing.T) {
 	t.Log("/*pocKeystoreManager*/")
 
 	// new poc keystore manager
-	kmc, err := NewKeystoreManagerForPoC(ldb, pubPassphrase, &config.ChainParams)
+	kmc, err := NewKeystoreManagerForPoC(ldb, pubPassphrase, config.ChainParams)
 	if err != nil {
 		t.Fatalf("failed to new keystore manager, %v", err)
 	}
 	//new keystore
-	accountID1, err := kmc.NewKeystore(privPassphrase, seed, "test0", &config.ChainParams, fastScrypt)
+	accountID1, err := kmc.NewKeystore(privPassphrase, seed, "test0", config.ChainParams, fastScrypt)
 	if err != nil {
 		t.Fatalf("failed to new keystore, %v", err)
 	}
-	_, err = kmc.NewKeystore(privPassphrase, seed2, "test1", &config.ChainParams, fastScrypt)
+	_, err = kmc.NewKeystore(privPassphrase, seed2, "test1", config.ChainParams, fastScrypt)
 	if err != nil {
 		t.Fatalf("failed to new keystore, %v", err)
 	}
@@ -440,16 +444,16 @@ func TestKeystoreManagerForPoC_ExportKeystore_DeleteKeystore_ImportKeystore(t *t
 	defer tearDown()
 	// new poc keystore manager
 	t.Log("/*db*/")
-	kmc, err := NewKeystoreManagerForPoC(ldb, pubPassphrase, &config.ChainParams)
+	kmc, err := NewKeystoreManagerForPoC(ldb, pubPassphrase, config.ChainParams)
 	if err != nil {
 		t.Fatalf("failed to new keystore manager, %v", err)
 	}
 	// new keystore
-	acctID0, cerr := kmc.NewKeystore(privPassphrase, seed, "first", &config.ChainParams, fastScrypt)
+	acctID0, cerr := kmc.NewKeystore(privPassphrase, seed, "first", config.ChainParams, fastScrypt)
 	if cerr != nil {
 		t.Fatalf("failed to new keystore, %v", cerr)
 	}
-	_, cerr = kmc.NewKeystore(privPassphrase, seed2, "second", &config.ChainParams, fastScrypt)
+	_, cerr = kmc.NewKeystore(privPassphrase, seed2, "second", config.ChainParams, fastScrypt)
 	if cerr != nil {
 		t.Fatalf("failed to new keystore, %v", cerr)
 	}
@@ -517,13 +521,13 @@ func TestKeystoreManagerForPoC_ChangePrivPassphrase(t *testing.T) {
 	defer tearDown()
 
 	// new keystore manager
-	kmc, err := NewKeystoreManagerForPoC(ldb, pubPassphrase, &config.ChainParams)
+	kmc, err := NewKeystoreManagerForPoC(ldb, pubPassphrase, config.ChainParams)
 	if err != nil {
 		t.Fatalf("failed to new keystore manager, %v", err)
 	}
 
 	// new keystore
-	accountID0, cerr := kmc.NewKeystore(privPassphrase, seed, "first", &config.ChainParams, fastScrypt)
+	accountID0, cerr := kmc.NewKeystore(privPassphrase, seed, "first", config.ChainParams, fastScrypt)
 	if cerr != nil {
 		t.Fatalf("failed to new keystore, %v", cerr)
 	}
@@ -612,13 +616,13 @@ func TestKeystoreManagerForPoC_ChangePubPassphrase(t *testing.T) {
 	defer tearDown()
 
 	// new keystore manager
-	kmc, err := NewKeystoreManagerForPoC(ldb, pubPassphrase, &config.ChainParams)
+	kmc, err := NewKeystoreManagerForPoC(ldb, pubPassphrase, config.ChainParams)
 	if err != nil {
 		t.Fatalf("failed to new keystore manager, %v", err)
 	}
 
 	// new keystore
-	accountID0, cerr := kmc.NewKeystore(privPassphrase, seed, "first", &config.ChainParams, fastScrypt)
+	accountID0, cerr := kmc.NewKeystore(privPassphrase, seed, "first", config.ChainParams, fastScrypt)
 	if cerr != nil {
 		t.Fatalf("failed to new keystore, %v", cerr)
 	}
@@ -645,7 +649,7 @@ func TestKeystoreManagerForPoC_ChangePubPassphrase(t *testing.T) {
 	defer tearDown2()
 
 	// new keystore manager
-	kmc2, err := NewKeystoreManagerForPoC(ldb2, pubPassphrase, &config.ChainParams)
+	kmc2, err := NewKeystoreManagerForPoC(ldb2, pubPassphrase, config.ChainParams)
 	if err != nil {
 		t.Fatalf("failed to new keystore manager, %v", err)
 	}
@@ -667,13 +671,13 @@ func TestDeriveKey(t *testing.T) {
 	defer tearDown()
 
 	// new keystore manager
-	kmc, err := NewKeystoreManagerForPoC(ldb, pubPassphrase, &config.ChainParams)
+	kmc, err := NewKeystoreManagerForPoC(ldb, pubPassphrase, config.ChainParams)
 	if err != nil {
 		t.Fatalf("failed to new keystore manager, %v", err)
 	}
 
 	// new keystore
-	accountID0, cerr := kmc.NewKeystore(privPassphrase, seed, "first", &config.ChainParams, fastScrypt)
+	accountID0, cerr := kmc.NewKeystore(privPassphrase, seed, "first", config.ChainParams, fastScrypt)
 	if cerr != nil {
 		t.Fatalf("failed to new keystore, %v", cerr)
 	}
@@ -765,16 +769,16 @@ func TestKeystoreManagerForPoC_ChangeRemark(t *testing.T) {
 
 	t.Log("/*pocKeystoreManager*/")
 	// new poc keystore manager
-	kmc, err := NewKeystoreManagerForPoC(ldb, pubPassphrase, &config.ChainParams)
+	kmc, err := NewKeystoreManagerForPoC(ldb, pubPassphrase, config.ChainParams)
 	if err != nil {
 		t.Fatalf("failed to new keystore manager, %v", err)
 	}
 	//new keystore
-	acctID1, err := kmc.NewKeystore(privPassphrase, seed, "", &config.ChainParams, fastScrypt)
+	acctID1, err := kmc.NewKeystore(privPassphrase, seed, "", config.ChainParams, fastScrypt)
 	if err != nil {
 		t.Fatalf("failed to new keystore, %v", err)
 	}
-	acctID2, err := kmc.NewKeystore(privPassphrase, seed2, "second", &config.ChainParams, fastScrypt)
+	acctID2, err := kmc.NewKeystore(privPassphrase, seed2, "second", config.ChainParams, fastScrypt)
 	if err != nil {
 		t.Fatalf("failed to new keystore, %v", err)
 	}
@@ -857,12 +861,12 @@ func TestBaseManager_GetManagedAddressByScriptHash(t *testing.T) {
 	t.Log("/*pocKeystoreManager*/")
 
 	// new poc keystore manager
-	kmc, err := NewKeystoreManagerForPoC(ldb, pubPassphrase, &config.ChainParams)
+	kmc, err := NewKeystoreManagerForPoC(ldb, pubPassphrase, config.ChainParams)
 	if err != nil {
 		t.Fatalf("failed to new keystore manager, %v", err)
 	}
 	//new keystore
-	acctID1, nerr := kmc.NewKeystore(privPassphrase, seed, "first", &config.ChainParams, fastScrypt)
+	acctID1, nerr := kmc.NewKeystore(privPassphrase, seed, "first", config.ChainParams, fastScrypt)
 	if nerr != nil {
 		t.Fatalf("failed to new keystore, %v", nerr)
 	}
@@ -896,12 +900,12 @@ func TestKeystoreManagerForPoC_SignMessage(t *testing.T) {
 	defer tearDown()
 
 	// new poc keystore manager
-	kmc, err := NewKeystoreManagerForPoC(ldb, pubPassphrase, &config.ChainParams)
+	kmc, err := NewKeystoreManagerForPoC(ldb, pubPassphrase, config.ChainParams)
 	if err != nil {
 		t.Fatalf("failed to new keystore manager, %v", err)
 	}
 	//new keystore
-	_, err = kmc.NewKeystore(privPassphrase, seed, "first", &config.ChainParams, fastScrypt)
+	_, err = kmc.NewKeystore(privPassphrase, seed, "first", config.ChainParams, fastScrypt)
 	if err != nil {
 		t.Fatalf("failed to new keystore, %v", err)
 	}
@@ -958,12 +962,12 @@ func TestBaseManager_SignHashPocec_VerifySigPocec(t *testing.T) {
 
 	t.Log("/*pocKeystoreManager*/")
 	// new poc keystore manager
-	kmc, err := NewKeystoreManagerForPoC(ldb, pubPassphrase, &config.ChainParams)
+	kmc, err := NewKeystoreManagerForPoC(ldb, pubPassphrase, config.ChainParams)
 	if err != nil {
 		t.Fatalf("failed to new keystore manager, %v", err)
 	}
 	// new keystore
-	acctID1, nerr := kmc.NewKeystore(privPassphrase, seed, "first", &config.ChainParams, fastScrypt)
+	acctID1, nerr := kmc.NewKeystore(privPassphrase, seed, "first", config.ChainParams, fastScrypt)
 	if nerr != nil {
 		t.Fatalf("failed to new keystore, %v", nerr)
 	}
@@ -1028,16 +1032,16 @@ func TestKeystoreManagerForPoC_GenerateNewPublicKeys(t *testing.T) {
 
 	t.Log("/*pocKeystoreManager*/")
 	// new poc keystore manager
-	kmc, err := NewKeystoreManagerForPoC(ldb, pubPassphrase, &config.ChainParams)
+	kmc, err := NewKeystoreManagerForPoC(ldb, pubPassphrase, config.ChainParams)
 	if err != nil {
 		t.Fatalf("failed to new keystore manager, %v", err)
 	}
 	//new keystore
-	acctID1, nerr := kmc.NewKeystore(privPassphrase, seed, "first", &config.ChainParams, fastScrypt)
+	acctID1, nerr := kmc.NewKeystore(privPassphrase, seed, "first", config.ChainParams, fastScrypt)
 	if nerr != nil {
 		t.Fatalf("failed to new keystore, %v", nerr)
 	}
-	acctID2, nerr := kmc.NewKeystore(privPassphrase, seed2, "second", &config.ChainParams, fastScrypt)
+	acctID2, nerr := kmc.NewKeystore(privPassphrase, seed2, "second", config.ChainParams, fastScrypt)
 	if nerr != nil {
 		t.Fatalf("failed to new keystore, %v", nerr)
 	}
@@ -1068,12 +1072,12 @@ func TestKeystoreManagerForPoC_ExportKeystore(t *testing.T) {
 	defer tearDown()
 	// new poc keystore manager
 	t.Log("/*db*/")
-	kmc, err := NewKeystoreManagerForPoC(ldb, pubPassphrase, &config.ChainParams)
+	kmc, err := NewKeystoreManagerForPoC(ldb, pubPassphrase, config.ChainParams)
 	if err != nil {
 		t.Fatalf("failed to new keystore manager, %v", err)
 	}
 	// new keystore
-	acctID0, cerr := kmc.NewKeystore(privPassphrase, seed, "first", &config.ChainParams, fastScrypt)
+	acctID0, cerr := kmc.NewKeystore(privPassphrase, seed, "first", config.ChainParams, fastScrypt)
 	if cerr != nil {
 		t.Fatalf("failed to new keystore, %v", cerr)
 	}
@@ -1128,7 +1132,7 @@ func TestKeystoreManagerForPoC_ImportKeystore(t *testing.T) {
 	defer tearDown()
 	// new poc keystore manager
 	t.Log("/*db*/")
-	kmc, err := NewKeystoreManagerForPoC(ldb, pubPassphrase, &config.ChainParams)
+	kmc, err := NewKeystoreManagerForPoC(ldb, pubPassphrase, config.ChainParams)
 	if err != nil {
 		t.Fatalf("failed to new keystore manager, %v", err)
 	}
@@ -1195,12 +1199,12 @@ func TestCheckPassword(t *testing.T) {
 
 	t.Log("/*pocKeystoreManager*/")
 	// new poc keystore manager
-	kmc, err := NewKeystoreManagerForPoC(ldb, pubPassphrase, &config.ChainParams)
+	kmc, err := NewKeystoreManagerForPoC(ldb, pubPassphrase, config.ChainParams)
 	if err != nil {
 		t.Fatalf("failed to new keystore manager, %v", err)
 	}
 	//new keystore
-	acctID1, nerr := kmc.NewKeystore(privPassphrase, seed, "first", &config.ChainParams, fastScrypt)
+	acctID1, nerr := kmc.NewKeystore(privPassphrase, seed, "first", config.ChainParams, fastScrypt)
 	if nerr != nil {
 		t.Fatalf("failed to new keystore, %v", nerr)
 	}
@@ -1232,12 +1236,12 @@ func TestKeystoreManagerForPoC_NextAddresses(t *testing.T) {
 
 	t.Log("/*pocKeystoreManager*/")
 	// new poc keystore manager
-	kmc, err := NewKeystoreManagerForPoC(ldb, pubPassphrase, &config.ChainParams)
+	kmc, err := NewKeystoreManagerForPoC(ldb, pubPassphrase, config.ChainParams)
 	if err != nil {
 		t.Fatalf("failed to new keystore manager, %v", err)
 	}
 	//new keystore
-	acctID1, nerr := kmc.NewKeystore(privPassphrase, seed, "first", &config.ChainParams, fastScrypt)
+	acctID1, nerr := kmc.NewKeystore(privPassphrase, seed, "first", config.ChainParams, fastScrypt)
 	if nerr != nil {
 		t.Fatalf("failed to new keystore, %v", nerr)
 	}
@@ -1266,12 +1270,12 @@ func TestKeystoreManagerForPoC_Unlock_NewKeystore(t *testing.T) {
 
 	t.Log("/*pocKeystoreManager*/")
 	// new poc keystore manager
-	kmc, err := NewKeystoreManagerForPoC(ldb, pubPassphrase, &config.ChainParams)
+	kmc, err := NewKeystoreManagerForPoC(ldb, pubPassphrase, config.ChainParams)
 	if err != nil {
 		t.Fatalf("failed to new keystore manager, %v", err)
 	}
 
-	acctID1, nerr := kmc.NewKeystore(privPassphrase, seed, "first", &config.ChainParams, fastScrypt)
+	acctID1, nerr := kmc.NewKeystore(privPassphrase, seed, "first", config.ChainParams, fastScrypt)
 	if nerr != nil {
 		t.Fatalf("failed to new keystore, %v", nerr)
 	}
@@ -1286,7 +1290,7 @@ func TestKeystoreManagerForPoC_Unlock_NewKeystore(t *testing.T) {
 		t.Fatalf("failed to new addresses, account: %v, %v", acctID1, err)
 	}
 
-	acctID2, nerr := kmc.NewKeystore(privPassphrase, seed2, "second", &config.ChainParams, fastScrypt)
+	acctID2, nerr := kmc.NewKeystore(privPassphrase, seed2, "second", config.ChainParams, fastScrypt)
 	if nerr != nil {
 		t.Fatalf("failed to new keystore, %v", nerr)
 	}
@@ -1309,13 +1313,13 @@ func TestKeystoreManagerForPoC_GetPublicKeyOrdinal(t *testing.T) {
 
 	t.Log("/*KeystoreManagerForPoC*/")
 	// new poc keystore manager
-	kmc, err := NewKeystoreManagerForPoC(ldb, pubPassphrase, &config.ChainParams)
+	kmc, err := NewKeystoreManagerForPoC(ldb, pubPassphrase, config.ChainParams)
 	if err != nil {
 		t.Fatalf("failed to new keystore manager, %v", err)
 	}
 
 	//new keystore
-	_, err = kmc.NewKeystore(privPassphrase, seed, "first", &config.ChainParams, fastScrypt)
+	_, err = kmc.NewKeystore(privPassphrase, seed, "first", config.ChainParams, fastScrypt)
 	if err != nil {
 		t.Fatalf("failed to new keystore, %v", err)
 	}
@@ -1364,13 +1368,13 @@ func TestKeystoreManagerForPoC_GetAddressByPubKey(t *testing.T) {
 
 	t.Log("/*KeystoreManagerForPoC*/")
 	// new poc keystore manager
-	kmc, err := NewKeystoreManagerForPoC(ldb, pubPassphrase, &config.ChainParams)
+	kmc, err := NewKeystoreManagerForPoC(ldb, pubPassphrase, config.ChainParams)
 	if err != nil {
 		t.Fatalf("failed to new keystore manager, %v", err)
 	}
 
 	//new keystore
-	accountId, err := kmc.NewKeystore(privPassphrase, seed, "first", &config.ChainParams, fastScrypt)
+	accountId, err := kmc.NewKeystore(privPassphrase, seed, "first", config.ChainParams, fastScrypt)
 	if err != nil {
 		t.Fatalf("failed to new keystore, %v", err)
 	}
@@ -1433,4 +1437,56 @@ func showAddrManagerDetails(t *testing.T, addrM *AddrManager) {
 	for _, addr := range addrM.ManagedAddresses() {
 		managedAddressDetails(t, addr)
 	}
+}
+
+func TestNewPublicKey(t *testing.T) {
+	masterHDPriv, err := hex.DecodeString(masterHDPrivStr)
+	if err != nil {
+		t.Fatalf("failed to decode masterHDPriv, error: %v", err)
+	}
+	masterChainCode, err := hex.DecodeString(masterChainCodeStr)
+	if err != nil {
+		t.Fatalf("failed to decode masterChainCode, error: %v", err)
+	}
+
+	parentFP := []byte{0x00, 0x00, 0x00, 0x00}
+	rootKey := hdkeychain.NewExtendedKey(config.ChainParams.HDPrivateKeyID[:], masterHDPriv, masterChainCode,
+		parentFP, 0, 0, true)
+
+	t.Log("master", hex.EncodeToString(rootKey.PublicKey()))
+	hdPath := &hdPath{
+		Account:          uint32(PoCUsage),
+		InternalChildNum: 0,
+		ExternalChildNum: 0,
+	}
+	scope := Net2KeyScope[config.ChainParams.HDCoinType]
+	coinTypeKeyPriv, err := deriveCoinTypeKey(rootKey, scope)
+	if err != nil {
+		t.Fatalf("failed to derive coinType key, error: %v", err)
+	}
+	t.Log("cointype", hex.EncodeToString(coinTypeKeyPriv.PublicKey()))
+
+	acctKeyPriv, err := deriveAccountKey(coinTypeKeyPriv, hdPath.Account)
+	if err != nil {
+		t.Fatalf("failed to derive account key, error: %v", err)
+	}
+	t.Log("account", hex.EncodeToString(acctKeyPriv.PublicKey()))
+
+	err = checkBranchKeys(acctKeyPriv)
+	if err != nil {
+		t.Fatalf("failed to check branch key, error: %v", err)
+	}
+
+	externalBranchPrivKey, err := acctKeyPriv.Child(ExternalBranch)
+	if err != nil {
+		t.Fatalf("failed to derive branch key, error: %v", err)
+	}
+	t.Log("branch", hex.EncodeToString(externalBranchPrivKey.PublicKey()))
+
+	childKey, err := externalBranchPrivKey.Child(754)
+	if err != nil {
+		t.Fatalf("failed to derive child key, error: %v", err)
+	}
+	pkStr := hex.EncodeToString(childKey.PublicKey())
+	t.Log("pk", pkStr)
 }

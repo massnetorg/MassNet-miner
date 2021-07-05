@@ -10,14 +10,14 @@ import (
 	"sync/atomic"
 	"time"
 
-	"massnet.org/mass/blockchain"
-	"massnet.org/mass/logging"
-	"massnet.org/mass/massutil"
-	"massnet.org/mass/massutil/service"
-	"massnet.org/mass/poc"
+	"github.com/massnetorg/mass-core/blockchain"
+	"github.com/massnetorg/mass-core/logging"
+	"github.com/massnetorg/mass-core/massutil"
+	"github.com/massnetorg/mass-core/massutil/service"
+	"github.com/massnetorg/mass-core/poc"
+	"github.com/massnetorg/mass-core/wire"
 	"massnet.org/mass/poc/engine"
 	"massnet.org/mass/poc/engine/spacekeeper"
-	"massnet.org/mass/wire"
 )
 
 const (
@@ -32,7 +32,7 @@ type Chain interface {
 	ProcessBlock(*massutil.Block) (bool, error)
 	ChainID() *wire.Hash
 	BlockWaiter(height uint64) (<-chan *blockchain.BlockNode, error)
-	NewBlockTemplate(massutil.Address, chan interface{}) error
+	NewBlockTemplate([]massutil.Address, chan interface{}) error
 }
 
 type SyncManager interface {
@@ -143,17 +143,16 @@ out:
 			logging.CPrint(logging.ERROR, "no valid mining payout addresses", logging.LogFormat{"err": ErrNoPayoutAddresses})
 			break out
 		}
-		payToAddr := payoutAddresses[rand.Intn(len(payoutAddresses))]
 
 		// start solve block
-		if newBlock, minerReward, err := m.solveBlock(payToAddr, quit); err == nil {
+		if newBlock, minerReward, err := m.solveBlock(payoutAddresses, quit); err == nil {
 			block := massutil.NewBlock(newBlock)
 			logging.CPrint(logging.INFO, "submitting mined block",
 				logging.LogFormat{
 					"height":     block.MsgBlock().Header.Height,
 					"hash":       block.Hash().String(),
-					"public_key": hex.EncodeToString(block.MsgBlock().Header.PubKey.SerializeCompressed()),
-					"bit_length": block.MsgBlock().Header.Proof.BitLength,
+					"public_key": hex.EncodeToString(block.MsgBlock().Header.PublicKey().SerializeCompressed()),
+					"bit_length": block.MsgBlock().Header.Proof.BitLength(),
 				})
 			m.submitBlock(block, minerReward)
 		} else if err != errQuitSolveBlock {
@@ -202,7 +201,7 @@ func (m *PoCMiner) submitBlock(block *massutil.Block, minerReward massutil.Amoun
 	return true
 }
 
-func (m *PoCMiner) solveBlock(payoutAddress massutil.Address, quit chan struct{}) (*wire.MsgBlock, massutil.Amount, error) {
+func (m *PoCMiner) solveBlock(payoutAddresses []massutil.Address, quit chan struct{}) (*wire.MsgBlock, massutil.Amount, error) {
 	var failure = func(err error) (*wire.MsgBlock, massutil.Amount, error) {
 		logging.CPrint(logging.INFO, "quit solve block", logging.LogFormat{"err": err})
 		return nil, massutil.ZeroAmount(), err
@@ -211,7 +210,7 @@ func (m *PoCMiner) solveBlock(payoutAddress massutil.Address, quit chan struct{}
 	// Step 1: request for poc & body template
 	logging.CPrint(logging.INFO, "Step 1: request for poc & body template")
 	templateCh := make(chan interface{}, 2)
-	if err := m.chain.NewBlockTemplate(payoutAddress, templateCh); err != nil {
+	if err := m.chain.NewBlockTemplate(payoutAddresses, templateCh); err != nil {
 		return failure(err)
 	}
 
@@ -318,7 +317,7 @@ func assembleFullBlock(blockTemplate *blockchain.BlockTemplate, pocTemplate *blo
 	block.Header.PubKey = workProof.PublicKey
 	block.Header.Proof = pocProof
 
-	coinbaseTx, err := pocTemplate.GetCoinbase(workProof.PublicKey, blockTemplate.TotalFee, pocProof.BitLength)
+	coinbaseTx, err := pocTemplate.GetCoinbase(workProof, blockTemplate.TotalFee)
 	if err != nil {
 		logging.CPrint(logging.WARN, "failed to find binding tx for the pubkey",
 			logging.LogFormat{"pubkey": workProof.PublicKey, "err": err})

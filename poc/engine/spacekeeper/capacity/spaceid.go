@@ -5,8 +5,8 @@ import (
 	"strconv"
 	"strings"
 
-	"massnet.org/mass/poc/pocutil"
-	"massnet.org/mass/pocec"
+	"github.com/massnetorg/mass-core/poc/pocutil"
+	"github.com/massnetorg/mass-core/pocec"
 )
 
 type SpaceID struct {

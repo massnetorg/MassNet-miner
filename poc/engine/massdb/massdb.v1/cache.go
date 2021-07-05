@@ -4,7 +4,7 @@ import (
 	"io"
 	"runtime"
 
-	"massnet.org/mass/poc"
+	"github.com/massnetorg/mass-core/poc"
 )
 
 // MemCache runs without mutex for better performance

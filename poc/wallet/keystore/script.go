@@ -1,10 +1,10 @@
 package keystore
 
 import (
+	"github.com/massnetorg/mass-core/logging"
+	"github.com/massnetorg/mass-core/massutil"
+	"github.com/massnetorg/mass-core/pocec"
 	"massnet.org/mass/config"
-	"massnet.org/mass/logging"
-	"massnet.org/mass/massutil"
-	"massnet.org/mass/pocec"
 )
 
 func NewPoCAddress(pubKey *pocec.PublicKey, net *config.Params) ([]byte, massutil.Address, error) {

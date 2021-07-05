@@ -8,9 +8,9 @@ import (
 	"os"
 
 	"github.com/golang/protobuf/ptypes/empty"
+	"github.com/massnetorg/mass-core/logging"
 	"google.golang.org/grpc/status"
 	pb "massnet.org/mass/api/proto"
-	"massnet.org/mass/logging"
 )
 
 var (
