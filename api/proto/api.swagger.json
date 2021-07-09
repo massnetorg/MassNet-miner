@@ -1369,6 +1369,9 @@
         },
         "time_utc": {
           "type": "string"
+        },
+        "binding_root": {
+          "type": "string"
         }
       }
     },
@@ -1473,6 +1476,9 @@
         "tx_count": {
           "type": "integer",
           "format": "int64"
+        },
+        "binding_root": {
+          "type": "string"
         }
       }
     },
@@ -1563,6 +1569,9 @@
           "items": {
             "type": "string"
           }
+        },
+        "binding_root": {
+          "type": "string"
         }
       }
     },
@@ -1978,6 +1987,9 @@
           "items": {
             "type": "string"
           }
+        },
+        "binding_root": {
+          "type": "string"
         }
       }
     },

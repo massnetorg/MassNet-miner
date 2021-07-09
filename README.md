@@ -18,13 +18,6 @@
 - Go to project directory `cd $GOPATH/src/github.com/massnetorg/MassNet-miner`.
 - Run Makefile `make build`. An executable `massminerd` would be generated in `./bin/`.
 
-#### Windows
-
-- Clone source code to `$GOPATH/src/github.com/massnetorg/MassNet-miner`.
-- Open terminal in `$GOPATH/src/github.com/massnetorg/MassNet-miner`.
-- Require environment variable as `GO111MODULE="on"`.
-- Run `go build -o bin/massminerd.exe`. An executable `massminerd.exe` would be generated in `./bin/`.
-
 ### Contributing Code
 
 #### Prerequisites
@@ -35,14 +28,14 @@
   # libprotoc
   libprotoc 3.6.1
   
-  # github.com/golang/protobuf 1.3.2
+  # github.com/golang/protobuf 1.4.2
   protoc-gen-go
   
-  # github.com/gogo/protobuf 1.2.1
+  # github.com/gogo/protobuf 1.3.1
   protoc-gen-gogo
   protoc-gen-gofast
   
-  # github.com/grpc-ecosystem/grpc-gateway 1.9.6
+  # github.com/grpc-ecosystem/grpc-gateway 1.14.5
   protoc-gen-grpc-gateway
   protoc-gen-swagger
   ```

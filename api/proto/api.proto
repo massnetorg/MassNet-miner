@@ -350,6 +350,7 @@ message Header {
     Proof proof = 13;
     PoCSignature block_signature = 14;
     repeated string ban_list = 15;
+    string binding_root = 16;
 }
 
 message FaultPubKey {
@@ -395,6 +396,7 @@ message GetBlockResponse {
     uint32 size = 22;
     string time_utc = 23;
     uint32 tx_count = 24;
+    string binding_root = 25;
 }
 
 message GetBlockHeaderRequest {
@@ -421,6 +423,7 @@ message GetBlockHeaderResponse {
     PoCSignature block_signature = 17;
     repeated string ban_list = 18;
     string time_utc = 19;
+    string binding_root = 20;
 }
 
 message GetBlockRequestV2 {
@@ -452,6 +455,7 @@ message GetBlockResponseV2 {
     ProposalArea proposals = 22;
     uint32 tx_count = 23;
     repeated string txids = 24;
+    string binding_root = 25;
 }
 
 message TxOutPoint {

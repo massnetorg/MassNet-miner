@@ -183,6 +183,7 @@ func createFaultPubKeyResult(proposals []*wire.FaultPubKey) []*pb.FaultPubKey {
 				Proof:           &pb.Proof{X: hex.EncodeToString(proof.X), XPrime: hex.EncodeToString(proof.XPrime), BitLength: uint32(proof.BitLength)},
 				BlockSignature:  createPoCSignatureResult(h.Signature),
 				BanList:         ban,
+				BindingRoot:     h.BindingRoot.String(),
 			}
 			t = append(t, th)
 		}

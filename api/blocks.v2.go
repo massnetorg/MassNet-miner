@@ -154,6 +154,7 @@ func (s *Server) marshalGetBlockResponse(blk *massutil.Block) (*pb.GetBlockRespo
 		Size:            uint32(blk.Size()),
 		TimeUtc:         blockHeader.Timestamp.UTC().Format(time.RFC3339),
 		TxCount:         uint32(len(blk.Transactions())),
+		BindingRoot:     blockHeader.BindingRoot.String(),
 	}
 	proposalArea := blk.MsgBlock().Proposals
 	punishments := createFaultPubKeyResult(proposalArea.PunishmentArea)
@@ -231,6 +232,7 @@ func (s *Server) marshalGetBlockV2Response(blk *massutil.Block) (*pb.GetBlockRes
 		PacketSize:      uint32(blk.PacketSize()),
 		TimeUtc:         blockHeader.Timestamp.UTC().Format(time.RFC3339),
 		TxCount:         uint32(len(txns)),
+		BindingRoot:     blockHeader.BindingRoot.String(),
 	}
 	proposalArea := blk.MsgBlock().Proposals
 	punishments := createFaultPubKeyResult(proposalArea.PunishmentArea)
@@ -295,6 +297,7 @@ func (s *Server) marshalGetBlockHeaderResponse(blk *massutil.Block) (*pb.GetBloc
 		BanList:         banList,
 		Quality:         quality,
 		TimeUtc:         msgBlock.Header.Timestamp.UTC().Format(time.RFC3339),
+		BindingRoot:     msgBlock.Header.BindingRoot.String(),
 	}
 	return blockHeaderReply, nil
 }
