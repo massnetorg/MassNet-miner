@@ -7,8 +7,8 @@ import (
 
 const (
 	defaultAPIURL      = "http://localhost:9686"
-	defaultLogDir      = "masscli-logs"
-	defaultLogFilename = "masscli"
+	defaultLogDir      = "logs"
+	defaultLogFilename = "massminercli"
 	defaultLogLevel    = "info"
 )
 

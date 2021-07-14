@@ -177,7 +177,6 @@ func peekMassDBInfosByDir(dbDir, dbType string) ([]engine.WorkSpaceInfo, error) 
 	var wsiList []engine.WorkSpaceInfo
 	for _, fi := range dirFileInfos {
 		fileName := fi.Name()
-		// try match suffix and `ordinal_pubKey_bitLength.suffix`
 		if !strings.HasSuffix(strings.ToUpper(fileName), suffixB) || !regExpB.MatchString(strings.ToUpper(fileName)) {
 			continue
 		}

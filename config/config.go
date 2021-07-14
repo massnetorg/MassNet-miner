@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io/ioutil"
 	"net"
+	"os"
 
 	"github.com/massnetorg/mass-core/config"
 )
@@ -154,6 +155,9 @@ func DefaultMiner() *Miner {
 func LoadConfig(filename string) (*Config, error) {
 	data, err := ioutil.ReadFile(filename)
 	if err != nil {
+		if os.IsNotExist(err) {
+			return DefaultConfig(), nil
+		}
 		return nil, err
 	}
 	cfg := DefaultConfig()

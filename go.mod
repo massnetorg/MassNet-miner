@@ -8,7 +8,7 @@ require (
 	github.com/gogo/protobuf v1.3.1
 	github.com/golang/protobuf v1.4.2
 	github.com/grpc-ecosystem/grpc-gateway v1.14.5
-	github.com/massnetorg/mass-core v0.0.0-20210709093321-83abbd20d609
+	github.com/massnetorg/mass-core v0.0.0-20210714200926-311fe8b0974c
 	github.com/orcaman/concurrent-map v0.0.0-20190314100340-2693aad1ed75
 	github.com/panjf2000/ants v1.2.0
 	github.com/shirou/gopsutil v3.21.5+incompatible
@@ -17,6 +17,7 @@ require (
 	github.com/stretchr/testify v1.7.0
 	github.com/syndtr/goleveldb v1.0.1-0.20210305035536-64b5b1c73954
 	github.com/tecbot/gorocksdb v0.0.0-20190705090504-162552197222
+	github.com/urfave/cli/v2 v2.3.0
 	golang.org/x/crypto v0.0.0-20210322153248-0c34fe9e7dc2
 	golang.org/x/net v0.0.0-20210226172049-e18ecbb05110
 	google.golang.org/genproto v0.0.0-20200108215221-bd8f9a0ef82f

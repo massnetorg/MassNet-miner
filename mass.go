@@ -1,7 +1,9 @@
 package main
 
 import (
+	"errors"
 	"fmt"
+	"log"
 	"net"
 	"net/http"
 	_ "net/http/pprof"
@@ -22,6 +24,7 @@ import (
 	"github.com/massnetorg/mass-core/massutil"
 	"github.com/massnetorg/mass-core/trie/massdb"
 	"github.com/massnetorg/mass-core/trie/rawdb"
+	"github.com/urfave/cli/v2"
 	"massnet.org/mass/config"
 	_ "massnet.org/mass/poc/wallet/db/ldb"
 	_ "massnet.org/mass/poc/wallet/db/rdb"
@@ -34,11 +37,30 @@ type Server interface {
 	Stop() error
 }
 
-func massMain(cfg *config.Config, serverType string) error {
+var configFilename = "config.json"
+
+func massMain(serverType version.ServiceMode) error {
+	// Use all processor cores.
+	runtime.GOMAXPROCS(runtime.NumCPU())
+
+	// Up some limits.
+	if err := limits.SetLimits(); err != nil {
+		return fmt.Errorf("failed to set limits: %w", err)
+	}
+
+	// Load and check config
+	cfg, err := config.LoadConfig(configFilename)
+	if err != nil {
+		return fmt.Errorf("failed to load config: %w", err)
+	}
+	if err = config.CheckConfig(cfg); err != nil {
+		return fmt.Errorf("failed to check config: %w", err)
+	}
+
 	logging.Init(cfg.Log.LogDir, config.DefaultLoggingFilename, cfg.Log.LogLevel, 1, cfg.Log.DisableCPrint)
 
 	// Show version at startup.
-	logging.CPrint(logging.INFO, fmt.Sprintf("version %s", version.GetVersion()))
+	logging.CPrint(logging.INFO, fmt.Sprintf("version %s", version.GetVersion()), logging.LogFormat{"config": configFilename})
 
 	// Enable http profiling srv if requested.
 	if cfg.Metrics.ProfilePort != "" {
@@ -76,24 +98,26 @@ func massMain(cfg *config.Config, serverType string) error {
 	// Create srv and start it.
 	var srv Server
 	switch serverType {
-	case "core":
+	case version.ModeCore:
 		if s, err1 := server.NewServer(cfg, db, state.NewDatabase(bindingDb), config.ChainParams); err1 == nil {
 			srv, err = server.NewCoreServer(cfg, s)
 		} else {
 			err = err1
 		}
-	case "m1":
+	case version.ModeMinerV1:
 		if s, err1 := server.NewServer(cfg, db, state.NewDatabase(bindingDb), config.ChainParams); err1 == nil {
 			srv, err = server.NewMinerServerV1(cfg, s, payoutAddresses)
 		} else {
 			err = err1
 		}
-	case "m2":
+	case version.ModeMinerV2:
 		if s, err1 := server.NewServer(cfg, db, state.NewDatabase(bindingDb), config.ChainParams); err1 == nil {
 			srv, err = server.NewMinerServerV2(cfg, s, payoutAddresses)
 		} else {
 			err = err1
 		}
+	default:
+		err = errors.New("unknown service mode, should be one of {core, m1, m2}")
 	}
 
 	if err != nil {
@@ -117,35 +141,72 @@ func massMain(cfg *config.Config, serverType string) error {
 }
 
 func main() {
-	// Use all processor cores.
-	runtime.GOMAXPROCS(runtime.NumCPU())
-
-	// Up some limits.
-	if err := limits.SetLimits(); err != nil {
-		fmt.Fprintf(os.Stderr, "failed to set limits: %v\n", err)
-		os.Exit(1)
+	app := &cli.App{
+		Name:  "massminer",
+		Usage: "Miner Full Node for MassNet Blockchain.",
+		Flags: []cli.Flag{
+			&cli.BoolFlag{
+				Name:    "version",
+				Aliases: []string{"V"},
+				Usage:   "show version",
+				Value:   false,
+			},
+			&cli.StringFlag{
+				Name:    "config",
+				Aliases: []string{"C"},
+				Usage:   "specify config filename",
+				Value:   "config.json",
+			},
+		},
+		Before: func(context *cli.Context) error {
+			if name := context.String("config"); name != "" {
+				configFilename = name
+			}
+			return nil
+		},
+		Action: func(context *cli.Context) error {
+			if context.Bool("version") {
+				fmt.Println("massminer", version.GetVersion())
+				return nil
+			}
+			return cli.ShowAppHelp(context)
+		},
+		Commands: []*cli.Command{
+			{
+				Name:  "core",
+				Usage: "Run massminer in core mode (sync with network but never mine blocks)",
+				Action: func(context *cli.Context) error {
+					return massMain(version.ModeCore)
+				},
+			},
+			{
+				Name:  "m1",
+				Usage: "Run massminer in m1 mode (mine blocks with native MassDB)",
+				Action: func(context *cli.Context) error {
+					return massMain(version.ModeMinerV1)
+				},
+			},
+			{
+				Name:  "m2",
+				Usage: "Run massminer in m2 mode (mine blocks with Chia DiskProver)",
+				Action: func(context *cli.Context) error {
+					return massMain(version.ModeMinerV2)
+				},
+			},
+			{
+				Name:  "version",
+				Usage: "Print version",
+				Action: func(context *cli.Context) error {
+					fmt.Println("massminer", version.GetVersion())
+					return nil
+				},
+			},
+		},
 	}
 
-	cfg, err := config.LoadConfig("config.json")
+	err := app.Run(os.Args)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "failed to load config: %v\n", err)
-		os.Exit(1)
-	}
-
-	if err = config.CheckConfig(cfg); err != nil {
-		fmt.Fprintf(os.Stderr, "failed to check config: %v\n", err)
-		os.Exit(1)
-	}
-
-	// Work around defer not working after os.Exit()
-	if len(os.Args) < 2 {
-		fmt.Fprintf(os.Stderr, "at least two args (core, m1, m2): %v\n", err)
-		os.Exit(1)
-	}
-
-	if err = massMain(cfg, os.Args[1]); err != nil {
-		fmt.Fprintf(os.Stderr, "error in main process: %v\n", err)
-		os.Exit(1)
+		log.Fatal(err)
 	}
 }
 

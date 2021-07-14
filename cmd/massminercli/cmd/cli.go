@@ -76,6 +76,10 @@ func init() {
 	RootCmd.AddCommand(showChiaKeystoreCmd)
 
 	getBindingListCmd.Flags().BoolVarP(&getBindingListFlagOverwrite, "overwrite", "o", false, "overwrite existed file")
-	getBindingListCmd.Flags().BoolVarP(&getBindingListFlagListAll, "all", "a", false, "list all plotted files instead of only plotted files")
+	getBindingListCmd.Flags().BoolVarP(&getBindingListFlagListAll, "all", "a", false, "list all files instead of only plotted files")
+	getBindingListCmd.Flags().StringVarP(&getBindingListFlagKeystore, "keystore", "", "", "specify the keystore to eliminate files without private key")
+	getBindingListCmd.Flags().BoolVarP(&getBindingListFlagOffline, "offline", "", false, "search for files in given directory instead of relying on miner API")
+	getBindingListCmd.Flags().StringVarP(&getBindingListFlagPlotType, "type", "t", "", "specify the searching plot type (m1 or m2) for offline flag")
+	getBindingListCmd.Flags().StringSliceVarP(&getBindingListFlagDirectories, "dirs", "d", nil, "specify the searching directories for offline flag")
 	RootCmd.AddCommand(getBindingListCmd)
 }
