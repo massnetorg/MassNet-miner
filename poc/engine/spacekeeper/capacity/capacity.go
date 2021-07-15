@@ -584,7 +584,7 @@ func (sk *SpaceKeeper) checkOSDiskSize(requiredBytes int) error {
 }
 
 func usableBitLength() []int {
-	return []int{24, 26, 28}
+	return []int{24, 26, 28, 30, 32, 34, 36, 38, 40}
 }
 
 // getIndexedWorkSpaces get all indexed workSpace grouped by bitLength
