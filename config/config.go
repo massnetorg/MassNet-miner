@@ -9,10 +9,10 @@ import (
 	"os"
 
 	"github.com/massnetorg/mass-core/config"
+	"github.com/massnetorg/mass-core/logging"
 )
 
 const (
-	defaultChainTag           = "mainnet"
 	DefaultConfigFilename     = "config.json"
 	DefaultLoggingFilename    = "mass"
 	defaultShowVersion        = false
@@ -156,6 +156,7 @@ func LoadConfig(filename string) (*Config, error) {
 	data, err := ioutil.ReadFile(filename)
 	if err != nil {
 		if os.IsNotExist(err) {
+			logging.CPrint(logging.WARN, "config file is not exist, using default", logging.LogFormat{"err": err, "filename": filename})
 			return DefaultConfig(), nil
 		}
 		return nil, err
@@ -219,7 +220,7 @@ func CheckConfig(cfg *Config) error {
 
 	if cfg.Miner.Generate {
 		if len(cfg.Miner.PayoutAddresses) == 0 {
-			return errors.New("mining addr cannot be empty when generate set true")
+			return errors.New("mining payout addresses cannot be empty when generate set true")
 		}
 		if len(cfg.Miner.PayoutAddresses) > MaxMiningPayoutAddresses {
 			return errors.New(fmt.Sprintln("mining addr cannot be more than", MaxMiningPayoutAddresses, "current", len(cfg.Miner.PayoutAddresses)))

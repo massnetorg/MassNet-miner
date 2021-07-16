@@ -39,6 +39,9 @@ func NewSpaceKeeperV1(args ...interface{}) (spacekeeper.SpaceKeeper, error) {
 	if err != nil {
 		return nil, err
 	}
+	if len(cfg.Miner.ProofDir) == 0 {
+		return nil, fmt.Errorf("%s require at least one proof_dir", TypeSpaceKeeperV1)
+	}
 	workerPool, err := ants.NewPoolPreMalloc(maxPoolWorker)
 	if err != nil {
 		return nil, err
@@ -124,7 +127,13 @@ func generateInitialIndex(sk *SpaceKeeper, dbType, regStrB, suffixB string) erro
 	dbDirs, dirFileInfos := prepareDirs(sk.dbDirs)
 	sk.dbDirs = dbDirs
 
+	if len(sk.dbDirs) == 0 {
+		return fmt.Errorf("%s generateInitialIndex require at least one db_dir", TypeSpaceKeeperV1)
+	}
+
+	logging.CPrint(logging.INFO, "searching for native massdb files from disk, this may take a while", logging.LogFormat{"dir_count": len(dbDirs)})
 	for idx, dbDir := range dbDirs {
+		logging.CPrint(logging.INFO, "searching for native massdb files", logging.LogFormat{"dir": dbDir})
 		for _, fi := range dirFileInfos[idx] {
 			fileName := fi.Name()
 			// try match suffix and `ordinal_pubKey_bitLength.suffix`

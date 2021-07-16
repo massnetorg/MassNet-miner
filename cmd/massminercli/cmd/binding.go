@@ -57,7 +57,7 @@ var getBindingListCmd = &cobra.Command{
 
 		_, err := os.Stat(getBindingListArgFilename)
 		if !os.IsNotExist(err) && !getBindingListFlagOverwrite {
-			logging.CPrint(logging.ERROR, "cannot overwrite existed file, try again with --overwrite", logging.LogFormat{
+			logging.CPrint(logging.FATAL, "cannot overwrite existed file, try again with --overwrite", logging.LogFormat{
 				"filename": getBindingListArgFilename,
 			})
 			return
@@ -289,7 +289,7 @@ func getOnlineBindingList() (list *massutil.BindingList, err error) {
 		chiaCount = uint64(len(plots))
 	default:
 		logging.CPrint(logging.ERROR, "client does not support binding list", logging.LogFormat{"service_mode": resp.ServiceMode})
-		return
+		return nil, fmt.Errorf("client does not support binding list")
 	}
 	if err != nil {
 		logging.CPrint(logging.ERROR, "fail to get online binding list", logging.LogFormat{"err": err})

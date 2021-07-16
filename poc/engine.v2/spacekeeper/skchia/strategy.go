@@ -1,6 +1,7 @@
 package skchia
 
 import (
+	"fmt"
 	"io/ioutil"
 	"os"
 	"path/filepath"
@@ -33,6 +34,9 @@ func NewSpaceKeeperChiaPoS(args ...interface{}) (spacekeeper.SpaceKeeper, error)
 	cfg, err := parseArgs(args...)
 	if err != nil {
 		return nil, err
+	}
+	if len(cfg.Miner.ProofDir) == 0 {
+		return nil, fmt.Errorf("%s require at least one proof_dir", TypeSpaceKeeperChiaPoS)
 	}
 	workerPool, err := ants.NewPoolPreMalloc(maxPoolWorker)
 	if err != nil {
@@ -98,10 +102,15 @@ func generateInitialIndex(sk *SpaceKeeper, dbType, regStrB, suffixB string) erro
 	dbDirs, dirFileInfos := prepareDirs(sk.dbDirs)
 	sk.dbDirs = dbDirs
 
+	if len(sk.dbDirs) == 0 {
+		return fmt.Errorf("%s generateInitialIndex require at least one db_dir", TypeSpaceKeeperChiaPoS)
+	}
+
+	logging.CPrint(logging.INFO, "searching for chia plot files from disk, this may take a while", logging.LogFormat{"dir_count": len(dbDirs)})
 	for idx, dbDir := range dbDirs {
+		logging.CPrint(logging.INFO, "searching for chia plot files", logging.LogFormat{"dir": dbDir})
 		for _, fi := range dirFileInfos[idx] {
 			fileName := fi.Name()
-			// try match suffix and `ordinal_pubKey_bitLength.suffix`
 			if !strings.HasSuffix(strings.ToUpper(fileName), suffixB) || !regExpB.MatchString(strings.ToUpper(fileName)) {
 				continue
 			}
