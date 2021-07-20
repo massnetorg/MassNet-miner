@@ -107,8 +107,10 @@ func generateInitialIndex(sk *SpaceKeeper, dbType, regStrB, suffixB string) erro
 	}
 
 	logging.CPrint(logging.INFO, "searching for chia plot files from disk, this may take a while", logging.LogFormat{"dir_count": len(dbDirs)})
+	var totalSearched int
 	for idx, dbDir := range dbDirs {
 		logging.CPrint(logging.INFO, "searching for chia plot files", logging.LogFormat{"dir": dbDir})
+		dirSearched := 0
 		for _, fi := range dirFileInfos[idx] {
 			fileName := fi.Name()
 			if !strings.HasSuffix(strings.ToUpper(fileName), suffixB) || !regExpB.MatchString(strings.ToUpper(fileName)) {
@@ -135,8 +137,19 @@ func generateInitialIndex(sk *SpaceKeeper, dbType, regStrB, suffixB string) erro
 
 			// Add workSpace into index
 			sk.addWorkSpaceToIndex(ws)
+			dirSearched += 1
 		}
+		logging.CPrint(logging.INFO, "loaded chia plot files from directory", logging.LogFormat{
+			"dir":      dbDir,
+			"db_count": dirSearched,
+		})
+		totalSearched += dirSearched
 	}
+
+	logging.CPrint(logging.INFO, "loaded chia plot files from all directories", logging.LogFormat{
+		"dir_count":      len(dbDirs),
+		"total_db_count": totalSearched,
+	})
 
 	return nil
 }

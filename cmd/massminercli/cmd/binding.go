@@ -114,7 +114,8 @@ func getOfflineBindingList() (list *massutil.BindingList, err error) {
 	interruptCh := make(chan os.Signal, 2)
 	signal.Notify(interruptCh, os.Interrupt, syscall.SIGTERM)
 
-	logging.CPrint(logging.INFO, "searching for plot files from disk, this may take a while (enter CTRL+C to cancel running)")
+	logging.CPrint(logging.INFO, "searching for plot files from disk, this may take a while (enter CTRL+C to cancel running)",
+		logging.LogFormat{"dir_count": len(absDirectories)})
 
 	var plots []massutil.BindingPlot
 	var defaultCount, chiaCount uint64
@@ -151,6 +152,7 @@ func getOfflineBindingListV1(interruptCh chan os.Signal, dirs []string, all bool
 	}
 
 	var plots []massutil.BindingPlot
+	var totalSearched int
 
 	for _, dbDir := range dirs {
 		dirFileInfos, err := ioutil.ReadDir(dbDir)
@@ -160,6 +162,7 @@ func getOfflineBindingListV1(interruptCh chan os.Signal, dirs []string, all bool
 
 		logging.CPrint(logging.INFO, "searching for native MassDB files", logging.LogFormat{"dir": dbDir})
 
+		dirSearched := 0
 		for _, fi := range dirFileInfos {
 			select {
 			case <-interruptCh:
@@ -192,9 +195,21 @@ func getOfflineBindingListV1(interruptCh chan os.Signal, dirs []string, all bool
 					Type:   uint8(poc.ProofTypeDefault),
 					Size:   uint8(info.BitLength),
 				})
+				dirSearched += 1
 			}
 		}
+
+		logging.CPrint(logging.INFO, "loaded native MassDB files from directory", logging.LogFormat{
+			"dir":      dbDir,
+			"db_count": dirSearched,
+		})
+		totalSearched += dirSearched
 	}
+
+	logging.CPrint(logging.INFO, "loaded native MassDB files from all directories", logging.LogFormat{
+		"dir_count":      len(dirs),
+		"total_db_count": totalSearched,
+	})
 
 	return plots, nil
 }
@@ -227,6 +242,7 @@ func getOfflineBindingListV2(interruptCh chan os.Signal, dirs []string, all bool
 	}
 
 	var plots []massutil.BindingPlot
+	var totalSearched int
 
 	for _, dbDir := range dirs {
 		dirFileInfos, err := ioutil.ReadDir(dbDir)
@@ -236,6 +252,7 @@ func getOfflineBindingListV2(interruptCh chan os.Signal, dirs []string, all bool
 
 		logging.CPrint(logging.INFO, "searching for chia plot files", logging.LogFormat{"dir": dbDir})
 
+		dirSearched := 0
 		for _, fi := range dirFileInfos {
 			select {
 			case <-interruptCh:
@@ -267,9 +284,21 @@ func getOfflineBindingListV2(interruptCh chan os.Signal, dirs []string, all bool
 					Type:   uint8(poc.ProofTypeChia),
 					Size:   uint8(info.K),
 				})
+				dirSearched += 1
 			}
 		}
+
+		logging.CPrint(logging.INFO, "loaded chia plot files from directory", logging.LogFormat{
+			"dir":      dbDir,
+			"db_count": dirSearched,
+		})
+		totalSearched += dirSearched
 	}
+
+	logging.CPrint(logging.INFO, "loaded chia plot files from all directories", logging.LogFormat{
+		"dir_count":      len(dirs),
+		"total_db_count": totalSearched,
+	})
 
 	return plots, err
 }

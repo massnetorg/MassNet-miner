@@ -132,8 +132,10 @@ func generateInitialIndex(sk *SpaceKeeper, dbType, regStrB, suffixB string) erro
 	}
 
 	logging.CPrint(logging.INFO, "searching for native massdb files from disk, this may take a while", logging.LogFormat{"dir_count": len(dbDirs)})
+	var totalSearched int
 	for idx, dbDir := range dbDirs {
 		logging.CPrint(logging.INFO, "searching for native massdb files", logging.LogFormat{"dir": dbDir})
+		dirSearched := 0
 		for _, fi := range dirFileInfos[idx] {
 			fileName := fi.Name()
 			// try match suffix and `ordinal_pubKey_bitLength.suffix`
@@ -176,8 +178,19 @@ func generateInitialIndex(sk *SpaceKeeper, dbType, regStrB, suffixB string) erro
 
 			// Add workSpace into index
 			sk.addWorkSpaceToIndex(ws)
+			dirSearched += 1
 		}
+		logging.CPrint(logging.INFO, "loaded native massdb files from directory", logging.LogFormat{
+			"dir":      dbDir,
+			"db_count": dirSearched,
+		})
+		totalSearched += dirSearched
 	}
+
+	logging.CPrint(logging.INFO, "loaded native massdb files from all directories", logging.LogFormat{
+		"dir_count":      len(dbDirs),
+		"total_db_count": totalSearched,
+	})
 
 	return nil
 }
