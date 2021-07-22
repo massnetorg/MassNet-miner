@@ -8,7 +8,7 @@ require (
 	github.com/gogo/protobuf v1.3.1
 	github.com/golang/protobuf v1.4.2
 	github.com/grpc-ecosystem/grpc-gateway v1.14.5
-	github.com/massnetorg/mass-core v0.0.0-20210722090956-a546acb6f00f
+	github.com/massnetorg/mass-core v0.0.0-20210722212652-5b2e43405600
 	github.com/orcaman/concurrent-map v0.0.0-20190314100340-2693aad1ed75
 	github.com/panjf2000/ants v1.2.0
 	github.com/shirou/gopsutil v3.21.5+incompatible

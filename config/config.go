@@ -86,6 +86,7 @@ func DefaultP2P() *config.P2P {
 		DialTimeout:      3,
 		VaultMode:        false,
 		ListenAddress:    "tcp://0.0.0.0:43453",
+		Whitelist:        []string{},
 	}
 }
 
