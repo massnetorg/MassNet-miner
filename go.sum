@@ -147,8 +147,8 @@ github.com/magiconair/properties v1.8.0 h1:LLgXmsheXeRoUOBOjtwPQCWIYqM/LU1ayDtDe
 github.com/magiconair/properties v1.8.0/go.mod h1:PppfXfuXeibc/6YijjN8zIbojt8czPbwD3XqdrwzmxQ=
 github.com/magiconair/properties v1.8.1 h1:ZC2Vc7/ZFkGmsVC9KvOjumD+G5lXy2RtTKyzRKO2BQ4=
 github.com/magiconair/properties v1.8.1/go.mod h1:PppfXfuXeibc/6YijjN8zIbojt8czPbwD3XqdrwzmxQ=
-github.com/massnetorg/mass-core v0.0.0-20210722084054-99352bf6ef03 h1:Cx2g+UOyCjjDIQjcpKqHhQbt9ty7ywgV5sXSX2rhR3c=
-github.com/massnetorg/mass-core v0.0.0-20210722084054-99352bf6ef03/go.mod h1:YGnV++vc9OFuAW5hJ6eyJ5xizmb7T7prXogY4OJ83LY=
+github.com/massnetorg/mass-core v0.0.0-20210722090956-a546acb6f00f h1:PIArR6yMfYZJ+VDslWUg/KnwDBxl0Tj/GO8uKb9Y37Y=
+github.com/massnetorg/mass-core v0.0.0-20210722090956-a546acb6f00f/go.mod h1:YGnV++vc9OFuAW5hJ6eyJ5xizmb7T7prXogY4OJ83LY=
 github.com/massnetorg/tendermint v1.0.0 h1:pDreH8/uV7UaxkAOBK+WQwIQllP69pbUlgWG3PRwEgI=
 github.com/massnetorg/tendermint v1.0.0/go.mod h1:/toGyIgoWJEHd+OZzoykSxx7TVR3Ftb9wo6EWFjU3T0=
 github.com/matttproud/golang_protobuf_extensions v1.0.1/go.mod h1:D8He9yQNgCq6Z5Ld7szi9bcBfOoFv/3dc6xSMkL2PC0=
