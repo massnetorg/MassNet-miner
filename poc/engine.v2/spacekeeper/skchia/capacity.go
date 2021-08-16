@@ -11,7 +11,7 @@ import (
 	"github.com/massnetorg/mass-core/poc"
 	"github.com/massnetorg/mass-core/poc/chiapos"
 	"github.com/massnetorg/mass-core/poc/pocutil"
-	"github.com/panjf2000/ants"
+	"github.com/panjf2000/ants/v2"
 	"github.com/shirou/gopsutil/disk"
 	"massnet.org/mass/poc/engine.v2"
 )
@@ -329,6 +329,13 @@ func (sk *SpaceKeeper) SignHash(sid string, hash [32]byte) (*chiapos.G2Element, 
 	if ws, ok := sk.workSpaceIndex[allState].Items()[sid]; ok {
 		localSk, plotPk := ws.SpaceID().PlotInfo().LocalSk, ws.SpaceID().PlotInfo().PlotPublicKey
 		return chiapos.NewAugSchemeMPL().SignPrepend(localSk, hash[:], plotPk)
+	}
+	return nil, ErrWorkSpaceDoesNotExist
+}
+
+func (sk *SpaceKeeper) GetPrivateKey(sid string) (*chiapos.PrivateKey, error) {
+	if ws, ok := sk.workSpaceIndex[allState].Items()[sid]; ok {
+		return ws.SpaceID().PlotInfo().LocalSk, nil
 	}
 	return nil, ErrWorkSpaceDoesNotExist
 }

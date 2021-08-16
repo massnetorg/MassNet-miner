@@ -7,10 +7,11 @@ require (
 	github.com/go-ole/go-ole v1.2.4 // indirect
 	github.com/gogo/protobuf v1.3.1
 	github.com/golang/protobuf v1.4.2
+	github.com/google/uuid v1.3.0
 	github.com/grpc-ecosystem/grpc-gateway v1.14.5
-	github.com/massnetorg/mass-core v0.0.0-20210727183201-7912150fc871
+	github.com/massnetorg/mass-core v0.0.0-20210816132538-be1c10e6c62a
 	github.com/orcaman/concurrent-map v0.0.0-20190314100340-2693aad1ed75
-	github.com/panjf2000/ants v1.2.0
+	github.com/panjf2000/ants/v2 v2.4.6
 	github.com/shirou/gopsutil v3.21.5+incompatible
 	github.com/spf13/cobra v0.0.5
 	github.com/spf13/viper v1.5.0

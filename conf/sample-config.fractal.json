@@ -1,0 +1,14 @@
+{
+  "log": {
+    "disable_cprint": false
+  },
+  "miner": {
+    "proof_dir": [
+      "/path/to/chia_plots1",
+      "/path/to/chia_plots2",
+      "/path/to/chia_plots3",
+      "/path/to/chia_plots4",
+      "/path/to/chia_plots5"
+    ]
+  }
+}

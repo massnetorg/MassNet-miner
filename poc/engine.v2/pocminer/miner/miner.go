@@ -11,21 +11,20 @@ import (
 	"time"
 
 	"github.com/massnetorg/mass-core/blockchain"
-	"github.com/massnetorg/mass-core/consensus/forks"
 	"github.com/massnetorg/mass-core/logging"
 	"github.com/massnetorg/mass-core/massutil"
 	"github.com/massnetorg/mass-core/massutil/service"
 	"github.com/massnetorg/mass-core/poc"
-	"github.com/massnetorg/mass-core/poc/chiapos"
 	"github.com/massnetorg/mass-core/poc/chiawallet"
 	"github.com/massnetorg/mass-core/wire"
+	"massnet.org/mass/fractal"
 	"massnet.org/mass/poc/engine.v2"
 	"massnet.org/mass/poc/engine.v2/spacekeeper"
 )
 
 const (
 	pocSlot    = poc.PoCSlot
-	allowAhead = 1
+	allowAhead = 5
 )
 
 type Chain interface {
@@ -61,12 +60,13 @@ type PoCMiner struct {
 	minedHeight     map[uint64]struct{}
 	newBlockCh      chan *wire.Hash
 	payoutAddresses []massutil.Address
-	getBestProof    func(pocTemplate *blockchain.PoCTemplate, quit chan struct{}) (*ProofTemplate, error)
 	keystore        *chiawallet.Keystore
+	superior        *fractal.LocalSuperior
 }
 
 func NewPoCMiner(name string, allowSolo bool, chain Chain, syncManager SyncManager, sk spacekeeper.SpaceKeeper,
-	newBlockCh chan *wire.Hash, payoutAddresses []massutil.Address, keystore *chiawallet.Keystore) *PoCMiner {
+	newBlockCh chan *wire.Hash, payoutAddresses []massutil.Address, keystore *chiawallet.Keystore,
+	superior *fractal.LocalSuperior) *PoCMiner {
 	m := &PoCMiner{
 		allowSolo:       allowSolo,
 		chain:           chain,
@@ -76,6 +76,7 @@ func NewPoCMiner(name string, allowSolo bool, chain Chain, syncManager SyncManag
 		newBlockCh:      newBlockCh,
 		payoutAddresses: payoutAddresses,
 		keystore:        keystore,
+		superior:        superior,
 	}
 	m.BaseService = service.NewBaseService(m, name)
 	return m
@@ -162,7 +163,7 @@ out:
 					"bit_length": block.MsgBlock().Header.Proof.BitLength(),
 				})
 			m.submitBlock(block, minerReward)
-		} else if err != errQuitSolveBlock {
+		} else if err != errQuitSolveBlock && err != errNoValidProof && err != errNotMassip2Block {
 			logging.CPrint(logging.ERROR, "fail to solve block", logging.LogFormat{"err": err})
 		}
 	}
@@ -206,110 +207,6 @@ func (m *PoCMiner) submitBlock(block *massutil.Block, minerReward massutil.Amoun
 	m.minedHeight[block.Height()] = struct{}{}
 
 	return true
-}
-
-func (m *PoCMiner) solveBlock(payoutAddresses []massutil.Address, quit chan struct{}) (*wire.MsgBlock, massutil.Amount, error) {
-	var failure = func(err error) (*wire.MsgBlock, massutil.Amount, error) {
-		logging.CPrint(logging.INFO, "quit solve block", logging.LogFormat{"err": err})
-		return nil, massutil.ZeroAmount(), err
-	}
-
-	if !forks.EnforceMASSIP0002(m.chain.BestBlockHeight() + 1) {
-		return nil, massutil.Amount{}, errNotMassip2Block
-	}
-
-	// Step 1: request for poc & body template
-	logging.CPrint(logging.INFO, "Step 1: request for poc & body template")
-	templateCh := make(chan interface{}, 2)
-	if err := m.chain.NewBlockTemplate(payoutAddresses, templateCh); err != nil {
-		return failure(err)
-	}
-
-	// Step 2: wait for poc template
-	logging.CPrint(logging.INFO, "Step 2: wait for poc template")
-	pocTemplateI, err := getTemplate(quit, templateCh, reflect.TypeOf(&blockchain.PoCTemplate{}))
-	if err != nil {
-		return failure(err)
-	}
-	pocTemplate := pocTemplateI.(*blockchain.PoCTemplate)
-
-	// Step 3: check for double mining
-	logging.CPrint(logging.INFO, "Step 3: check for double mining")
-	if _, ok := m.minedHeight[pocTemplate.Height]; ok {
-		time.Sleep(time.Second)
-		logging.CPrint(logging.INFO, "sleep mining for 1 sec to avoid double mining", logging.LogFormat{"height": pocTemplate.Height})
-		return failure(errAvoidDoubleMining)
-	}
-
-	// Step 4: get best proof
-	logging.CPrint(logging.INFO, "Step 4: get best proof", logging.LogFormat{
-		"height":    pocTemplate.Height,
-		"previous":  pocTemplate.Previous,
-		"timestamp": pocTemplate.Timestamp.Unix(),
-		"challenge": pocTemplate.Challenge,
-	})
-	tProof, err := m.getBestProof(pocTemplate, quit)
-	if err != nil {
-		if err == errNoValidProof {
-			time.Sleep(time.Second * pocSlot)
-			logging.CPrint(logging.INFO, "sleep mining for 3 sec to wait for valid poofs", logging.LogFormat{"height": pocTemplate.Height})
-		}
-		return failure(err)
-	}
-
-	// Step 5: wait for chain template
-	logging.CPrint(logging.INFO, "Step 5: wait for chain template")
-	blockTemplateI, err := getTemplate(quit, templateCh, reflect.TypeOf(&blockchain.BlockTemplate{}))
-	if err != nil {
-		return failure(err)
-	}
-	blockTemplate := blockTemplateI.(*blockchain.BlockTemplate)
-
-	// Step 6: assemble full block
-	logging.CPrint(logging.INFO, "Step 6: assemble full block")
-	block, minerReward, err := assembleFullBlock(blockTemplate, pocTemplate, tProof)
-	if err != nil {
-		return failure(err)
-	}
-
-	// Step 7: get plot signature for poc hash
-	logging.CPrint(logging.INFO, "Step 7: get plot signature for poc hash")
-	pocHash, err := block.Header.PoCHash()
-	if err != nil {
-		return failure(err)
-	}
-	plotSig, err := m.SpaceKeeper.SignHash(tProof.proof.SpaceID, wire.HashH(pocHash[:]))
-	if err != nil {
-		return failure(err)
-	}
-
-	// Step 8: get farmer signature for poc hash
-	minerKey, err := m.keystore.GetMinerKeyByPoolPublicKey(tProof.proof.Proof.PoolPublicKey)
-	if err != nil {
-		return failure(err)
-	}
-	// verify plot_key
-	// TODO: get plot_local_public_key
-	//calcPlotPub, err := tProof.proof.Proof.PlotPublicKey.Copy().Add(minerKey.FarmerPublicKey)
-	//if err != nil {
-	//	return failure(err)
-	//}
-	//if !calcPlotPub.Equals(tProof.proof.Proof.PlotPublicKey) {
-	//	return failure(errors.New("farmer key is not as expected"))
-	//}
-	signer := chiapos.NewAugSchemeMPL()
-	logging.CPrint(logging.INFO, "Step 8: get farmer signature for poc hash")
-	farmerSig, err := signer.SignPrepend(minerKey.FarmerPrivateKey, wire.HashB(pocHash[:]), tProof.proof.PublicKey)
-	if err != nil {
-		return failure(err)
-	}
-	block.Header.Signature, err = signer.Aggregate(plotSig, farmerSig)
-	if err != nil {
-		return failure(err)
-	}
-
-	logging.CPrint(logging.INFO, "Step 9: return")
-	return block, minerReward, nil
 }
 
 func getTemplate(quit chan struct{}, ch chan interface{}, typ reflect.Type) (interface{}, error) {

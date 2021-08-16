@@ -14,7 +14,7 @@ import (
 	"github.com/massnetorg/mass-core/massutil/service"
 	"github.com/massnetorg/mass-core/poc"
 	"github.com/massnetorg/mass-core/pocec"
-	"github.com/panjf2000/ants"
+	"github.com/panjf2000/ants/v2"
 	"massnet.org/mass/config"
 	"massnet.org/mass/poc/engine"
 	massdb_v1 "massnet.org/mass/poc/engine/massdb/massdb.v1"
@@ -42,7 +42,7 @@ func NewSpaceKeeperV1(args ...interface{}) (spacekeeper.SpaceKeeper, error) {
 	if len(cfg.Miner.ProofDir) == 0 {
 		return nil, fmt.Errorf("%s require at least one proof_dir", TypeSpaceKeeperV1)
 	}
-	workerPool, err := ants.NewPoolPreMalloc(maxPoolWorker)
+	workerPool, err := ants.NewPool(maxPoolWorker, ants.WithPreAlloc(true))
 	if err != nil {
 		return nil, err
 	}

@@ -27,6 +27,7 @@ type SpaceKeeper interface {
 	ActOnWorkSpace(sid string, action engine.ActionType) error
 	ActOnWorkSpaces(flags engine.WorkSpaceStateFlags, action engine.ActionType) (map[string]error, error)
 	SignHash(sid string, hash [32]byte) (*chiapos.G2Element, error)
+	GetPrivateKey(sid string) (*chiapos.PrivateKey, error)
 }
 
 var (

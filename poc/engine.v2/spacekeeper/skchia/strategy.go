@@ -10,7 +10,7 @@ import (
 
 	"github.com/massnetorg/mass-core/logging"
 	"github.com/massnetorg/mass-core/massutil/service"
-	"github.com/panjf2000/ants"
+	"github.com/panjf2000/ants/v2"
 	"massnet.org/mass/config"
 	"massnet.org/mass/poc/engine.v2"
 	massdb_chiapos "massnet.org/mass/poc/engine.v2/massdb/massdb.chiapos"
@@ -38,7 +38,7 @@ func NewSpaceKeeperChiaPoS(args ...interface{}) (spacekeeper.SpaceKeeper, error)
 	if len(cfg.Miner.ProofDir) == 0 {
 		return nil, fmt.Errorf("%s require at least one proof_dir", TypeSpaceKeeperChiaPoS)
 	}
-	workerPool, err := ants.NewPoolPreMalloc(maxPoolWorker)
+	workerPool, err := ants.NewPool(maxPoolWorker, ants.WithPreAlloc(true))
 	if err != nil {
 		return nil, err
 	}
@@ -94,10 +94,11 @@ func generateInitialIndex(sk *SpaceKeeper, dbType, regStrB, suffixB string) erro
 		sk.workSpaceIndex = append(sk.workSpaceIndex, NewWorkSpaceMap())
 	}
 
-	regExpB, err := regexp.Compile(regStrB)
-	if err != nil {
-		return err
-	}
+	// FIXME: disable regexp to support irregular plot filenames
+	//regExpB, err := regexp.Compile(regStrB)
+	//if err != nil {
+	//	return err
+	//}
 
 	dbDirs, dirFileInfos := prepareDirs(sk.dbDirs)
 	sk.dbDirs = dbDirs
@@ -113,7 +114,10 @@ func generateInitialIndex(sk *SpaceKeeper, dbType, regStrB, suffixB string) erro
 		dirSearched := 0
 		for _, fi := range dirFileInfos[idx] {
 			fileName := fi.Name()
-			if !strings.HasSuffix(strings.ToUpper(fileName), suffixB) || !regExpB.MatchString(strings.ToUpper(fileName)) {
+			//if !strings.HasSuffix(strings.ToUpper(fileName), suffixB) || !regExpB.MatchString(strings.ToUpper(fileName)) {
+			//	continue
+			//}
+			if !strings.HasSuffix(strings.ToUpper(fileName), suffixB) {
 				continue
 			}
 

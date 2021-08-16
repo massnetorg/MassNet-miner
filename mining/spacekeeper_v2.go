@@ -100,3 +100,7 @@ func (m *MockedSpaceKeeperV2) ActOnWorkSpaces(flags engine_v2.WorkSpaceStateFlag
 func (m *MockedSpaceKeeperV2) SignHash(sid string, hash [32]byte) (*chiapos.G2Element, error) {
 	return nil, ErrNotImplemented
 }
+
+func (m *MockedSpaceKeeperV2) GetPrivateKey(sid string) (*chiapos.PrivateKey, error) {
+	return nil, ErrNotImplemented
+}

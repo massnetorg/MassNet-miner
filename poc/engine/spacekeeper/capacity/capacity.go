@@ -12,7 +12,7 @@ import (
 	"github.com/massnetorg/mass-core/poc"
 	"github.com/massnetorg/mass-core/poc/pocutil"
 	"github.com/massnetorg/mass-core/pocec"
-	"github.com/panjf2000/ants"
+	"github.com/panjf2000/ants/v2"
 	"github.com/shirou/gopsutil/disk"
 	"massnet.org/mass/poc/engine"
 )

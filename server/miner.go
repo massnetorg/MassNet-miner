@@ -6,11 +6,11 @@ import (
 	"github.com/massnetorg/mass-core/poc/chiawallet"
 	"massnet.org/mass/api"
 	"massnet.org/mass/config"
+	"massnet.org/mass/fractal"
 	"massnet.org/mass/mining"
 	pocminer_v2 "massnet.org/mass/poc/engine.v2/pocminer"
 	miner_v2 "massnet.org/mass/poc/engine.v2/pocminer/miner"
 	spacekeeper_v2 "massnet.org/mass/poc/engine.v2/spacekeeper"
-	"massnet.org/mass/poc/engine.v2/spacekeeper/skchia"
 	pocminer_v1 "massnet.org/mass/poc/engine/pocminer"
 	spacekeeper_v1 "massnet.org/mass/poc/engine/spacekeeper"
 	"massnet.org/mass/version"
@@ -106,20 +106,14 @@ type MinerServerV2 struct {
 	pocMiner    pocminer_v2.PoCMiner
 }
 
-func NewMinerServerV2(cfg *config.Config, srv *Server, payoutAddresses []massutil.Address) (*MinerServerV2, error) {
+func NewMinerServerV2(cfg *config.Config, srv *Server, payoutAddresses []massutil.Address, spaceKeeper spacekeeper_v2.SpaceKeeper, superior *fractal.LocalSuperior) (*MinerServerV2, error) {
 	keystore, err := chiawallet.NewKeystoreFromFile(cfg.Miner.ChiaMinerKeystore)
 	if err != nil {
 		logging.CPrint(logging.ERROR, "fail on NewKeystoreFromFile", logging.LogFormat{"err": err, "keystore": cfg.Miner.ChiaMinerKeystore})
 		return nil, err
 	}
 
-	spaceKeeper, err := spacekeeper_v2.NewSpaceKeeper(skchia.TypeSpaceKeeperChiaPoS, cfg)
-	if err != nil {
-		logging.CPrint(logging.ERROR, "fail on NewSpaceKeeper", logging.LogFormat{"err": err, "backend": skchia.TypeSpaceKeeperChiaPoS})
-		return nil, err
-	}
-
-	pocMiner, err := pocminer_v2.NewPoCMiner(miner_v2.TypeSyncMiner, cfg.Miner.AllowSolo, srv.chain, srv.syncManager, spaceKeeper, srv.newBlockCh, payoutAddresses, keystore)
+	pocMiner, err := pocminer_v2.NewPoCMiner(miner_v2.TypeChiaPosMiner, cfg.Miner.AllowSolo, srv.chain, srv.syncManager, spaceKeeper, srv.newBlockCh, payoutAddresses, keystore, superior)
 	if err != nil {
 		logging.CPrint(logging.ERROR, "fail on NewPoCMiner", logging.LogFormat{"err": err, "backend": cfg.Miner.PocminerBackend})
 		return nil, err

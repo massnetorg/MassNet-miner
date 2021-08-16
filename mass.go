@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"log"
@@ -10,7 +11,6 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
-	"runtime"
 	"syscall"
 
 	"github.com/massnetorg/mass-core/blockchain/state"
@@ -26,6 +26,10 @@ import (
 	"github.com/massnetorg/mass-core/trie/rawdb"
 	"github.com/urfave/cli/v2"
 	"massnet.org/mass/config"
+	"massnet.org/mass/fractal"
+	"massnet.org/mass/mining"
+	spacekeeper_v2 "massnet.org/mass/poc/engine.v2/spacekeeper"
+	"massnet.org/mass/poc/engine.v2/spacekeeper/skchia"
 	_ "massnet.org/mass/poc/wallet/db/ldb"
 	_ "massnet.org/mass/poc/wallet/db/rdb"
 	"massnet.org/mass/server"
@@ -39,10 +43,7 @@ type Server interface {
 
 var configFilename = "config.json"
 
-func massMain(serverType version.ServiceMode) error {
-	// Use all processor cores.
-	runtime.GOMAXPROCS(runtime.NumCPU())
-
+func massMain(cliContext *cli.Context, serverType version.ServiceMode) error {
 	// Up some limits.
 	if err := limits.SetLimits(); err != nil {
 		return fmt.Errorf("failed to set limits: %w", err)
@@ -112,12 +113,47 @@ func massMain(serverType version.ServiceMode) error {
 		}
 	case version.ModeMinerV2:
 		if s, err1 := server.NewServer(cfg, db, state.NewDatabase(bindingDb), config.ChainParams); err1 == nil {
-			srv, err = server.NewMinerServerV2(cfg, s, payoutAddresses)
+			superior := fractal.NewLocalSuperior()
+
+			var pool *fractal.CollectorPool
+			if poolAddress := cliContext.String("pool"); poolAddress != "" {
+				var stopPool context.CancelFunc
+				maxCollector := uint32(cliContext.Uint64("max-collector"))
+				pool, stopPool, err = fractal.NewCollectorPool(context.Background(), superior,
+					fractal.CollectorPoolListenAddress(poolAddress), fractal.CollectorPoolMaxCollector(maxCollector))
+				if err != nil {
+					logging.CPrint(logging.ERROR, "fail on NewCollectorPool", logging.LogFormat{
+						"err":            err,
+						"listen_address": poolAddress,
+						"max_collector":  maxCollector,
+					})
+					return fmt.Errorf("fail on NewCollectorPool: %v", err)
+				}
+				defer stopPool()
+				go reportCollectorPool(context.Background(), pool)
+			}
+
+			var spaceKeeper spacekeeper_v2.SpaceKeeper
+			if cliContext.Bool("no-local-collector") {
+				spaceKeeper = mining.NewMockedSpaceKeeperV2()
+			} else {
+				spaceKeeper, err = spacekeeper_v2.NewSpaceKeeper(skchia.TypeSpaceKeeperChiaPoS, cfg)
+				if err != nil {
+					logging.CPrint(logging.ERROR, "fail on NewSpaceKeeper", logging.LogFormat{"err": err, "backend": skchia.TypeSpaceKeeperChiaPoS})
+					return fmt.Errorf("fail on NewSpaceKeeper: %v", err)
+				}
+
+				lc, stopLc := fractal.NewLocalCollector(context.Background(), superior, spaceKeeper)
+				defer stopLc()
+				logging.CPrint(logging.INFO, "new local_collector", logging.LogFormat{"collector_id": lc.ID()})
+			}
+
+			srv, err = server.NewMinerServerV2(cfg, s, payoutAddresses, spaceKeeper, superior)
 		} else {
 			err = err1
 		}
 	default:
-		err = errors.New("unknown service mode, should be one of {core, m1, m2}")
+		err = errors.New("unknown service mode, should be one of {core, m1, m2, fractal}")
 	}
 
 	if err != nil {
@@ -176,21 +212,67 @@ func main() {
 				Name:  "core",
 				Usage: "Run massminer in core mode (sync with network but never mine blocks)",
 				Action: func(context *cli.Context) error {
-					return massMain(version.ModeCore)
+					return massMain(context, version.ModeCore)
 				},
 			},
 			{
 				Name:  "m1",
 				Usage: "Run massminer in m1 mode (mine blocks with native MassDB)",
 				Action: func(context *cli.Context) error {
-					return massMain(version.ModeMinerV1)
+					return massMain(context, version.ModeMinerV1)
 				},
 			},
 			{
 				Name:  "m2",
 				Usage: "Run massminer in m2 mode (mine blocks with Chia DiskProver)",
+				Flags: []cli.Flag{
+					&cli.StringFlag{
+						Name:    "pool",
+						Aliases: []string{"p"},
+						Usage:   "specify collector_pool listen address by <ip:port>",
+					},
+					&cli.Uint64Flag{
+						Name:  "max-collector",
+						Usage: "specify the max collector number in collector_pool",
+						Value: 2000,
+					},
+					&cli.BoolFlag{
+						Name:  "no-local-collector",
+						Usage: "do not run local collector",
+						Value: false,
+					},
+				},
 				Action: func(context *cli.Context) error {
-					return massMain(version.ModeMinerV2)
+					return massMain(context, version.ModeMinerV2)
+				},
+			},
+			{
+				Name:  "fractal",
+				Usage: "Run in fractal mode",
+				Flags: []cli.Flag{
+					&cli.StringFlag{
+						Name:    "superior",
+						Aliases: []string{"s"},
+						Usage:   "specify remote_superior listen address by <ip:port>",
+					},
+					&cli.StringFlag{
+						Name:    "pool",
+						Aliases: []string{"p"},
+						Usage:   "specify collector_pool listen address by <ip:port>",
+					},
+					&cli.Uint64Flag{
+						Name:  "max-collector",
+						Usage: "specify the max collector number in collector_pool",
+						Value: 2000,
+					},
+					&cli.BoolFlag{
+						Name:  "no-local-collector",
+						Usage: "do not run local collector",
+						Value: false,
+					},
+				},
+				Action: func(context *cli.Context) error {
+					return fractalMain(context)
 				},
 			},
 			{
