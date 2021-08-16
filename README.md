@@ -4,6 +4,10 @@
 
 `MassNet Miner` is a Golang implementation of MassNet full-node miner.
 
+## Cluster-Mining Guide
+
+Deploy cluster-mining by referring to this [guide](docs/cluster-mining.md).
+
 ## Requirements
 
 [Go](http://golang.org) 1.13 or newer.
